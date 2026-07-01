@@ -1,5 +1,5 @@
-from enum import StrEnum
 import os
+from enum import StrEnum
 
 # AWS Parameter store path and parameter names
 prefix = os.getenv("PROFILE_NAME_PREFIX", "rdmt")
