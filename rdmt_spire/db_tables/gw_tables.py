@@ -13,7 +13,8 @@ from ..constants.database import (
     VISIT_ID_LENGTH,
 )
 from ..constants.dmd import FileTypes
-from .base import Base
+from .base import Base, ResultsBase
+
 
 class L1GuideWindowMetaTable(Base):
     """Class containing schema for the L1 Guide Window data metadata table."""
