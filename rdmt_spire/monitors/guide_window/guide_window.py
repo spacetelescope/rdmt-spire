@@ -206,19 +206,19 @@ class GuideWindowMonitor(BaseMonitor):
         str
             Saturation class:
 
-            - ``"saturated"`` when at least one pixel is saturated in >90% frames.
-            - ``"sometimes_saturated"`` when saturation occurs intermittently.
-            - ``"not_saturated"`` when no saturation is detected.
+            - ``"SATURATED"`` when at least one pixel is saturated in >90% frames.
+            - ``"SOMETIMES_SATURATED"`` when saturation occurs intermittently.
+            - ``"NOT_SATURATED"`` when no saturation is detected.
         """
         # TODO: make sure we are only looking at relevant tracking frames
         saturated_pixels = self.asdf_file.tree['roman']['track_data']['signal_resultants'] > saturation_threshold
         
         if (np.sum(saturated_pixels, axis=0) > 0.9 * self.asdf_file.tree['roman']['track_data']['signal_resultants'].shape[0]).any(): # if more than 90% of the frames are saturated for a given pixel, we will consider that pixel to be saturated.
-            return "saturated"
+            return "SATURATED"
         elif (np.sum(saturated_pixels, axis=0) > 0).any(): # if some but not most of the frames are saturated for a given pixel, we will consider that pixel to be sometimes saturated.
-            return "sometimes_saturated"
+            return "SOMETIMES_SATURATED"
         else:
-            return "not_saturated"
+            return "NOT_SATURATED"
 
     def check_acquisition_status(self):
         """
@@ -425,14 +425,14 @@ class GuideWindowMonitor(BaseMonitor):
         """
 
         acquisition_status = self.get_data("acquisition_status") 
-        if acquisition_status != "SUCCESS":
+        if acquisition_status.upper() != "SUCCESS":
             logger.error(f"{self.monitor_name}: Guide star acquisition was not successful ({acquisition_status})")
             self.add_evaluation("acquisition_status", False)
         else:
             self.add_evaluation("acquisition_status", True)
         
         saturation_status = self.get_data("saturation_status") 
-        if saturation_status != "not_saturated":
+        if saturation_status.upper() != "NOT_SATURATED":
             logger.error(f"{self.monitor_name}: Guide window is saturated ({saturation_status})")
             self.add_evaluation("saturation_status", False)
         else:
