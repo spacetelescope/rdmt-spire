@@ -143,6 +143,8 @@ class Base(DeclarativeBase):
 class ResultsBase(Base):
     """Base table for results tables that contain metrics and evaluations."""
 
+    __abstract__ = True
+
     def get_metric_eval_pairs(self):
         eval_column_names = [column.name for column in self.__table__.columns if "_eval" in column.name]
         metric_column_names = [eval_name.removesuffix('_eval') for eval_name in eval_column_names]
