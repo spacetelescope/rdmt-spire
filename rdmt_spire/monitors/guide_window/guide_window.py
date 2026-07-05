@@ -14,7 +14,8 @@ from ...constants.guide_window_constants import (
     NUM_COUNT_RATE_OUTLIERS_THRESHOLD,
     NUM_NOISE_OUTLIERS_THRESHOLD,
     RMS_CENTROID_OFFSET_THRESHOLD,
-    RMS_JITTER_THRESHOLDS,
+    RMS_X_JITTER_THRESHOLDS,
+    RMS_Y_JITTER_THRESHOLDS,
     WSM_EDGE_LOCATIONS,
     WSM_GW_TOP,
 )
@@ -63,14 +64,18 @@ class GuideWindowMonitor(BaseMonitor):
         -------
         mean_centroid_positions : numpy.ndarray
             Mean centroid position ``[x, y]`` across all tracking frames.
-        rms_centroid_error : float
-            Root-mean-square radial centroid deviation from the mean position, in pixels.
+        rms_x_centroid_error : float
+            Root-mean-square radial centroid deviation from the mean position in the X direction, in pixels.
+        rms_y_centroid_error : float
+            Root-mean-square radial centroid deviation from the mean position in the Y direction, in pixels.
         """
         # TODO: make sure we are only looking at relevant tracking centroids
         mean_centroid_positions = np.mean(self.asdf_file.tree["roman"]["centroid"]["track_centroids"], axis=0)
-        rms_centroid_error = np.sqrt(np.mean(np.sum((self.asdf_file.tree["roman"]["centroid"]["track_centroids"] - mean_centroid_positions)**2, axis=1)))
+        centroid_deviations = self.asdf_file.tree["roman"]["centroid"]["track_centroids"] - mean_centroid_positions
+        rms_x_centroid_error = np.sqrt(np.mean(np.sum(centroid_deviations[0,:]**2)))
+        rms_y_centroid_error = np.sqrt(np.mean(np.sum(centroid_deviations[1,:]**2)))
 
-        return mean_centroid_positions, rms_centroid_error
+        return mean_centroid_positions, rms_x_centroid_error, rms_y_centroid_error
     
 
     def _get_wim_annulus_mask(self, arr: np.ndarray, edge_buffer: int, annulus_width: int) -> np.ndarray:
@@ -393,10 +398,11 @@ class GuideWindowMonitor(BaseMonitor):
 
         # if the acquisition was successful, calculate metrics that rely on the centroid data. 
         if success:
-            mean_centroid_positions, rms_centroid_error = self._process_centroids()
+            mean_centroid_positions, rms_x_centroid_error, rms_y_centroid_error = self._process_centroids()
 
             # Store centroid metrics in datacards
-            self.append_data("rms_centroid_error", rms_centroid_error, "pixels") # to evaluate jitter / stability 
+            self.append_data("rms_x_centroid_error", rms_x_centroid_error, "pixels") # to evaluate jitter / stability 
+            self.append_data("rms_y_centroid_error", rms_y_centroid_error, "pixels") 
 
             # check for systematic centroid position offsets
             expected_centroid_position = np.array([
@@ -408,7 +414,8 @@ class GuideWindowMonitor(BaseMonitor):
             self.append_data("rms_centroid_offset", rms_centroid_offset, "pixels") # to evaluate if there is a systematic offset in the centroid positions compared to the expected position
 
         else: 
-            self.append_data("rms_centroid_error", None, "pixels") 
+            self.append_data("rms_x_centroid_error", None, "pixels") 
+            self.append_data("rms_y_centroid_error", None, "pixels") 
             self.append_data("rms_centroid_offset", None, "pixels")
 
 
@@ -523,27 +530,45 @@ class GuideWindowMonitor(BaseMonitor):
 
         # evaluate the centroid metrics if they exist (e.g. acquisition was successful)
         if acquisition_status == "SUCCESS":
-            rms_centroid_error = self.get_data("rms_centroid_error")
+            rms_x_centroid_error = self.get_data("rms_x_centroid_error")
+            rms_y_centroid_error = self.get_data("rms_y_centroid_error")
 
             optical_element = self.asdf_file.tree['roman']['meta']['instrument']['optical_element']
             fgs_mode = self.asdf_file.tree['roman']['meta']['fgs_modes_used'][0]
 
-            if self.is_valid_metric("rms_centroid_error", rms_centroid_error):
+            if self.is_valid_metric("rms_x_centroid_error", rms_x_centroid_error):
                 if "WIM" in fgs_mode:
-                    threshold = RMS_JITTER_THRESHOLDS.get("WIM")
+                    threshold = RMS_X_JITTER_THRESHOLDS.get("WIM")
                 elif "DEF" in optical_element.upper():
-                    threshold = RMS_JITTER_THRESHOLDS.get("DEFOCUS")
+                    threshold = RMS_X_JITTER_THRESHOLDS.get("DEFOCUS")
                 else:
-                    threshold = RMS_JITTER_THRESHOLDS.get(optical_element.upper())
+                    threshold = RMS_X_JITTER_THRESHOLDS.get(optical_element.upper())
                 if threshold is None:
-                    logger.warning(f"{self.monitor_name}: No RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}. Skipping evaluation of RMS centroid error.")
-                    raise ValueError(f"No RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}.")
+                    logger.warning(f"{self.monitor_name}: No X RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}. Skipping evaluation of RMS centroid error.")
+                    raise ValueError(f"No X RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}.")
 
-                if rms_centroid_error > threshold:
-                    logger.warning(f"{self.monitor_name}: RMS centroid error is above the threshold ({rms_centroid_error} pixels > {threshold} pixels).")
-                    self.add_evaluation("rms_centroid_error", False)
+                if rms_x_centroid_error > threshold:
+                    logger.warning(f"{self.monitor_name}: X RMS centroid error is above the threshold ({rms_x_centroid_error} pixels > {threshold} pixels).")
+                    self.add_evaluation("rms_x_centroid_error", False)
                 else:
-                    self.add_evaluation("rms_centroid_error", True)
+                    self.add_evaluation("rms_x_centroid_error", True)
+
+            if self.is_valid_metric("rms_y_centroid_error", rms_y_centroid_error):
+                if "WIM" in fgs_mode:
+                    threshold = RMS_Y_JITTER_THRESHOLDS.get("WIM")
+                elif "DEF" in optical_element.upper():
+                    threshold = RMS_Y_JITTER_THRESHOLDS.get("DEFOCUS")
+                else:
+                    threshold = RMS_Y_JITTER_THRESHOLDS.get(optical_element.upper())
+                if threshold is None:
+                    logger.warning(f"{self.monitor_name}: No Y RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}. Skipping evaluation of RMS centroid error.")
+                    raise ValueError(f"No Y RMS jitter threshold defined for optical element {optical_element} and FGS mode {fgs_mode}.")
+
+                if rms_y_centroid_error > threshold:
+                    logger.warning(f"{self.monitor_name}: Y RMS centroid error is above the threshold ({rms_y_centroid_error} pixels > {threshold} pixels).")
+                    self.add_evaluation("rms_y_centroid_error", False)
+                else:
+                    self.add_evaluation("rms_y_centroid_error", True)
 
             rms_centroid_offset = self.get_data("rms_centroid_offset")
             if self.is_valid_metric("rms_centroid_offset", rms_centroid_offset):
