@@ -41,6 +41,8 @@ def handler(event, context):
         alembic_file_local_path = Path('/tmp/alembic_files')
 
         if event["source"] == "aws.codepipeline":
+            codepipeline_job_id = event["CodePipeline.job"]["id"]
+
             log_stream = io.StringIO()
             new_handler = logging.StreamHandler(log_stream)
             formatter = logging.Formatter('%(asctime)s - %(levelname)-7.7s [%(name)s] %(message)s')
@@ -56,6 +58,8 @@ def handler(event, context):
             manual_revision = user_parameters_dict.get('manual_revision')
             log_bucket_name = user_parameters_dict.get('log_bucket_name')
         else:
+            codepipeline_job_id = None
+
             change_type = event.get("change_type")
             allow_update = event.get("allow_update")
             revision_str = event.get("revision_str")
@@ -91,6 +95,7 @@ def handler(event, context):
             logger.info('Copy complete.')
         except Exception as e:
             logger.error(f"{e.__class__.__name__}: {str(e)}")
+            check_codepipeline_return(codepipeline_job_id, StatusCodes.ALEMBIC_FAILED_VERSIONS_DOWNLOAD)
             return {
                 'statusCode': StatusCodes.ALEMBIC_FAILED_VERSIONS_DOWNLOAD,
                 'body': json.dumps({
@@ -107,6 +112,7 @@ def handler(event, context):
                 logger.info('alembic executions complete.')
             except Exception as e:
                 logger.error(f"{e.__class__.__name__}: {str(e)}")
+                check_codepipeline_return(codepipeline_job_id, StatusCodes.ALEMBIC_UPDATE_FAILURE)
                 return {
                     'statusCode': StatusCodes.ALEMBIC_UPDATE_FAILURE,
                     'body': json.dumps({
@@ -138,6 +144,7 @@ def handler(event, context):
                 logger.info('alembic executions complete.')
             except Exception as e:
                 logger.error(f"{e.__class__.__name__}: {str(e)}")
+                check_codepipeline_return(codepipeline_job_id, StatusCodes.ALEMBIC_UPDATE_FAILURE)
                 return {
                     'statusCode': StatusCodes.ALEMBIC_UPDATE_FAILURE,
                     'body': json.dumps({
@@ -164,7 +171,7 @@ def handler(event, context):
 
         # save the logging file to s3 if a log bucket name was provided
         if log_bucket_name:
-            file_key = f'alembic_handler_logs/{job_id}_log.txt'
+            file_key = f'alembic_handler_logs/{codepipeline_job_id}_log.txt'
 
             # Write the log stream to S3
             s3_client.put_object(
@@ -180,6 +187,11 @@ def handler(event, context):
                 ExpiresIn=1800 # 30 minutes in seconds
             )
             logger.info(f'Log file saved to s3://{log_bucket_name}/{file_key}')
+        else:
+            review_log_url = None
+            logger.info('No log bucket name provided, thus no log file saved to S3.')
+
+        check_codepipeline_return(codepipeline_job_id, StatusCodes.SUCCESS, log_file_url=review_log_url)
 
         return {
             'statusCode': StatusCodes.SUCCESS,
@@ -196,3 +208,33 @@ def handler(event, context):
                 'error': f"{e.__class__.__name__}: {str(e)}"
             })
         }
+
+def check_codepipeline_return(job_id, status, log_file_url=None):
+    """Check the status of a CodePipeline job and update it accordingly.
+    
+    Parameters
+    ----------
+    job_id : str
+        The ID of the CodePipeline job to check.
+    status : int
+        The status code to return to CodePipeline.
+    log_file_url : str, optional
+        The URL of the log file to include in the job success result.
+        
+    """
+    if job_id is not None:
+        if status == StatusCodes.SUCCESS:
+            codepipeline_client.put_job_success_result(
+                jobId = job_id,
+                outputVariables = {
+                    'review_log_url': log_file_url,
+                }
+            )
+        else:
+            codepipeline_client.put_job_failure_result(
+                jobId = job_id,
+                failureDetails = {
+                    'type': 'JobFailed',
+                    'message': "Failed in alembic_handler. See logs for details.",
+                }
+            )
