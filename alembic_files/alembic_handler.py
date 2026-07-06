@@ -40,7 +40,9 @@ def handler(event, context):
         params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=AWS_DBS + AWS_S3_BUCKETS)
         alembic_file_local_path = Path('/tmp/alembic_files')
 
-        if event["source"] == "aws.codepipeline":
+        log_stream = None
+        new_handler = None
+        if 'CodePipeline.job' in event:
             codepipeline_job_id = event["CodePipeline.job"]["id"]
 
             log_stream = io.StringIO()
@@ -108,7 +110,14 @@ def handler(event, context):
         if change_type == "upgrade":
             try:
                 logger.info('Starting alembic checking/upgrade process.')
-                db_update_bool, revision_path = run_alembic_upgrade('alembic.ini', str(alembic_file_local_path), revision_str, allow_update=allow_update, save_revision=manual_revision)
+                db_update_bool, revision_path = run_alembic_upgrade(
+                    'alembic.ini',
+                    str(alembic_file_local_path),
+                    revision_str,
+                    allow_update=allow_update,
+                    save_revision=manual_revision,
+                    app_logger=logger,
+                )
                 logger.info('alembic executions complete.')
             except Exception as e:
                 logger.error(f"{e.__class__.__name__}: {str(e)}")
@@ -140,7 +149,13 @@ def handler(event, context):
         elif change_type == "downgrade":
             try:
                 logger.info('Starting alembic downgrade process.')
-                versions_to_delete = run_alembic_downgrade('alembic.ini', str(alembic_file_local_path), revision_str, allow_update=allow_update)
+                versions_to_delete = run_alembic_downgrade(
+                    'alembic.ini',
+                    str(alembic_file_local_path),
+                    revision_str,
+                    allow_update=allow_update,
+                    app_logger=logger,
+                )
                 logger.info('alembic executions complete.')
             except Exception as e:
                 logger.error(f"{e.__class__.__name__}: {str(e)}")
@@ -170,7 +185,7 @@ def handler(event, context):
         logger.info(f'alembic_handler finished: {exit_message}')
 
         # save the logging file to s3 if a log bucket name was provided
-        if log_bucket_name:
+        if log_bucket_name and log_stream is not None:
             file_key = f'alembic_handler_logs/{codepipeline_job_id}_log.txt'
 
             # Write the log stream to S3
@@ -191,8 +206,12 @@ def handler(event, context):
             review_log_url = None
             logger.info('No log bucket name provided, thus no log file saved to S3.')
 
-        check_codepipeline_return(codepipeline_job_id, StatusCodes.SUCCESS, log_file_url=review_log_url)
+        if new_handler is not None:
+            logger.removeHandler(new_handler)
+            new_handler.close()
 
+        check_codepipeline_return(codepipeline_job_id, StatusCodes.SUCCESS, log_file_url=review_log_url)
+        logger.info("Finished alembic_handler execution.")
         return {
             'statusCode': StatusCodes.SUCCESS,
             'body': json.dumps({
@@ -202,7 +221,7 @@ def handler(event, context):
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {str(e)}")
         return {
-            'statusCode': StatusCodes.ALEMBIC_HANDLER_FAILURE,
+            'statusCode': StatusCodes.ALEMBIC_UPDATE_FAILURE,
             'body': json.dumps({
                 'message': 'An unexpected error occurred in the alembic_handler.',
                 'error': f"{e.__class__.__name__}: {str(e)}"
@@ -220,21 +239,27 @@ def check_codepipeline_return(job_id, status, log_file_url=None):
         The status code to return to CodePipeline.
     log_file_url : str, optional
         The URL of the log file to include in the job success result.
-        
+
     """
     if job_id is not None:
         if status == StatusCodes.SUCCESS:
-            codepipeline_client.put_job_success_result(
-                jobId = job_id,
-                outputVariables = {
-                    'review_log_url': log_file_url,
-                }
-            )
+            logger.info(f"CodePipeline job {job_id} succeeded. Log file URL: {log_file_url}")
+            try:
+                codepipeline_client.put_job_success_result(
+                    jobId = job_id,
+                    outputVariables = {
+                        'review_log_url': log_file_url,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed to update CodePipeline job {job_id} success result: {e}")
+                codepipeline_client.put_job_failure_result(
+                    jobId = job_id,
+                    failureDetails = {
+                        'type': 'JobFailed',
+                        'message': "Failed in alembic_handler. See logs for details.",
+                    }
+                )
         else:
-            codepipeline_client.put_job_failure_result(
-                jobId = job_id,
-                failureDetails = {
-                    'type': 'JobFailed',
-                    'message': "Failed in alembic_handler. See logs for details.",
-                }
-            )
+            logger.info(f"CodePipeline job {job_id} failed with status {status}.")
+            
