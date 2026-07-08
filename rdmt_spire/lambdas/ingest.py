@@ -17,6 +17,7 @@ from ..constants.lambdas import (
     NOISE_1F_MONITOR_QUEUE,
     MessageKeys,
 )
+from ..db_tables.gw_tables import L1GuideWindowMetaTable
 from ..db_tables.sci_tables import L2ScienceMetaTable
 from ..utilities.aws_utils import fetch_parameters_from_path, get_sqs_url
 from ..utilities.db_utils import connect_to_db
@@ -134,7 +135,7 @@ def create_table_class_from_message(message_dict):
 
     This function interprets a message dictionary produced by the DMD
     notification system, constructs the appropriate metadata table class
-    (currently only for L2 science files), and populates its fields using
+    (currently only for L2 science and L1 guide window files), and populates its fields using
     both message contents and parsed filename information.
 
     Parameters
@@ -156,7 +157,7 @@ def create_table_class_from_message(message_dict):
 
     Returns
     -------
-    meta_table : L2ScienceMetaTable
+    meta_table : L2ScienceMetaTable or L1GuideWindowMetaTable
         Populated metadata table instance containing:
         - filename
         - archive bucket and key
@@ -180,6 +181,23 @@ def create_table_class_from_message(message_dict):
         obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L2_SCIENCE)
         meta_table.program_number = obs_info['program_num']
         meta_table.exposure_number = obs_info['exposure_num']
+        meta_table.visit_id = obs_info['visit_id']
+        meta_table.detector = obs_info['detector']
+        meta_table.optical_element = obs_info['optical_element']
+    
+    elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
+        meta_table = L1GuideWindowMetaTable()
+        # Save metadata from DMD notification
+        meta_table.filename = message_dict[MessageKeys.FILENAME]
+        meta_table.archive_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
+        meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
+        meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+
+        # Save metadata from the filename
+        obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L1_GUIDE_WINDOW)
+        meta_table.program_number = obs_info['program_num']
+        meta_table.gw_acquisition_number = obs_info['gw_acquisition_num']
+        meta_table.acquisition_id = f"{obs_info['visit_id']}_{obs_info['gw_acquisition_num']}"
         meta_table.visit_id = obs_info['visit_id']
         meta_table.detector = obs_info['detector']
         meta_table.optical_element = obs_info['optical_element']

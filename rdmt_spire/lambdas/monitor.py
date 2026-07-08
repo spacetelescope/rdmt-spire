@@ -15,6 +15,7 @@ from ..constants.lambdas import (
     DB_SECRET_NAME,
     MessageKeys,
 )
+from ..db_tables.gw_tables import L1GuideWindowMetaTable, L1GuideWindowResultsTable
 from ..db_tables.sci_tables import L2ScienceMetaTable, L2ScienceResultsTable
 from ..manager import MonitorManager
 from ..utilities.aws_utils import fetch_parameters_from_path, load_s3_object
@@ -81,6 +82,9 @@ def monitor_function(message_dict):
     if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
         metadata_table_class = L2ScienceMetaTable
         results_table_class = L2ScienceResultsTable
+    elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
+        metadata_table_class = L1GuideWindowMetaTable
+        results_table_class = L1GuideWindowResultsTable
 
     # Connecting to the database
     logger.info('Connecting to the database.')

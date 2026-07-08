@@ -28,6 +28,7 @@ class L1GuideWindowMetaTable(Base):
     program_number:         Mapped[int] = mapped_column(Integer()) # from filename
     visit_id:               Mapped[str] = mapped_column(String(VISIT_ID_LENGTH)) # from filename
     gw_acquisition_number:  Mapped[int] = mapped_column(Integer()) # from filename
+    acquisition_id:         Mapped[str] = mapped_column(String(VISIT_ID_LENGTH+2)) # from filename    
     detector:               Mapped[str] = mapped_column(String(DETECTOR_LENGTH)) # from filename
     optical_element:        Mapped[str] = mapped_column(String(OPTICAL_ELEMENT_LENGTH)) # from filename
     archive_bucket:         Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveBucket']
@@ -36,6 +37,7 @@ class L1GuideWindowMetaTable(Base):
     dmd_notify_datetime:    Mapped[datetime] = mapped_column(DateTime()) # from outer message structure
 
     # Information that requires opening the file to extract
+    acq_start_datetime:     Mapped[Optional[datetime]] = mapped_column(DateTime()) # from meta.start_time
     sdf_version:            Mapped[Optional[str]] = mapped_column(String(SOFTWARE_VERSION_LENGTH)) # from meta.sdf_software_version
 
     # Information populated by RDMT

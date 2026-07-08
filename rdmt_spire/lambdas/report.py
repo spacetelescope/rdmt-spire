@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 
 import boto3
@@ -14,9 +15,11 @@ from ..constants.lambdas import (
     DB_NAME,
     DB_SECRET_NAME,
     PARQUET_FILE_BUCKET,
-    REPORTING_TOPIC,
+    SCIENCE_REPORTING_TOPIC,
+    GUIDE_WINDOW_REPORTING_TOPIC,
 )
-from ..db_tables.sci_tables import L2ScienceResultsTable
+from ..db_tables.gw_tables import L1GuideWindowMetaTable, L1GuideWindowResultsTable
+from ..db_tables.sci_tables import L2ScienceMetaTable, L2ScienceResultsTable
 from ..utilities.aws_utils import fetch_parameters_from_path
 from ..utilities.db_utils import connect_to_db
 
@@ -25,7 +28,53 @@ logger.setLevel(logging.INFO)
 
 tab_str = "    "
 
-def report_function():
+
+@dataclass(frozen=True)
+class ReportSpec:
+    """Configuration for report-type-specific table and column behavior."""
+
+    meta_table_class: type
+    results_table_class: type
+    start_time_column: str
+    reporting_topic_name: str
+    summary_id_column: str
+
+    @property
+    def meta_table_name(self) -> str:
+        return self.meta_table_class.__tablename__
+    
+    @property
+    def results_table_name(self) -> str:
+        return self.results_table_class.__tablename__
+
+
+def _get_report_spec(report_type: str, params: dict) -> ReportSpec:
+    """Return the report configuration for the requested report type."""
+    normalized_report_type = report_type.lower()
+
+    if normalized_report_type == "science":
+        return ReportSpec(
+            meta_table_class=L2ScienceMetaTable,
+            results_table_class=L2ScienceResultsTable,
+            start_time_column="exp_start_datetime",
+            reporting_topic_name=params[SCIENCE_REPORTING_TOPIC],
+            summary_id_column="observation_id",
+        )
+
+    if normalized_report_type == "guide_window":
+        return ReportSpec(
+            meta_table_class=L1GuideWindowMetaTable,
+            results_table_class=L1GuideWindowResultsTable,
+            start_time_column="acq_start_datetime",
+            reporting_topic_name=params[GUIDE_WINDOW_REPORTING_TOPIC],
+            summary_id_column="acquisition_id",
+        )
+
+    raise ValueError(
+        f"Invalid report_type '{report_type}'. Must be 'science' or 'guide_window'."
+    )
+
+def report_function(report_type: str = "science"):
     """
     Orchestrates the extraction, transformation, and reporting of RDMT file 
     metadata, metrics and evaluations.
@@ -40,9 +89,8 @@ def report_function():
 
     Parameters
     ----------
-    None
-        The function retrieves necessary connection details and configurations 
-        from environment variables and `connect_to_db` utilities.
+    report_type : str
+        The type of report to generate either "science" or "guide_window". Defaults to "science".
 
     Returns
     -------
@@ -54,6 +102,8 @@ def report_function():
 
     conn = None
     try:
+        report_spec = _get_report_spec(report_type, params)
+
         logger.info('Getting SQL URL')
         sql_url = connect_to_db(database_name=params[DB_NAME], secret_name=params[DB_SECRET_NAME]).url
 
@@ -96,10 +146,11 @@ def report_function():
 
         # Generate the report datetime and set the value for all columns to be reported (e.g. all rows where file reported date is not populated but all "_status" columns are -1 or 1 (indicating all monitors that needed to run have done so successfully))
         report_time = datetime.now().replace(microsecond=0)
-        update_report_time_str = """
-            UPDATE l2_science_meta
+        status_ready_condition = _status_columns_ready_condition(conn, report_spec.meta_table_name)
+        update_report_time_str = f"""
+            UPDATE {report_spec.meta_table_name}
             SET monitor_end_datetime = $1
-            WHERE astrometry_status IN (-1, 1) AND noise_1f_status IN (-1, 1)
+            WHERE {status_ready_condition}
             AND monitor_end_datetime IS NULL 
         """
         update_report_result = conn.execute(update_report_time_str, (report_time,))
@@ -128,10 +179,10 @@ def report_function():
                     SELECT 
                         M.*,
                         R.* EXCLUDE(filename, reprocess_number),
-                        year(M.exp_start_datetime) AS obs_year_part, 
-                        month(M.exp_start_datetime) AS obs_month_part 
-                    FROM l2_science_meta AS m
-                    JOIN l2_science_results AS R
+                        year(M.{report_spec.start_time_column}) AS obs_year_part, 
+                        month(M.{report_spec.start_time_column}) AS obs_month_part 
+                    FROM {report_spec.meta_table_name} AS M
+                    JOIN {report_spec.results_table_name} AS R
                     ON M.filename = R.filename AND M.reprocess_number = R.reprocess_number
                     WHERE M.monitor_end_datetime = $1
                 ) 
@@ -142,12 +193,17 @@ def report_function():
             logger.info("Saved parquet file to dataset.")
 
             logger.info("Generating report message string.")
-            report_message = generate_report_message(conn, s3_parquet_bucket_path, report_time)
+            report_message = generate_report_message(
+                conn,
+                s3_parquet_bucket_path,
+                report_time,
+                report_spec,
+            )
 
             # Send out an SNS report of all
             logger.info("Sending SNS Email notification.")
             sns = boto3.client('sns')
-            report_topic = sns.create_topic(Name=params[REPORTING_TOPIC])
+            report_topic = sns.create_topic(Name=report_spec.reporting_topic_name)
             try:
                 response = sns.publish(
                     TopicArn=report_topic['TopicArn'],
@@ -178,7 +234,38 @@ def report_function():
     return {'statusCode': StatusCodes.SUCCESS,
                 'body': [{'_message':'Successfully completed report_function.'}]}
 
-def generate_report_message(duckdb_connection, s3_parquet_bucket, report_generation_time):
+def _status_columns_ready_condition(conn, table_name: str) -> str:
+    """Build an AND predicate requiring every *_status column to be -1 or 1.
+    
+    Parameters
+    ----------
+    conn : duckdb.DuckDBPyConnection
+        An active DuckDB connection object capable of executing SQL queries.
+    table_name : str
+        The name of the table to inspect for *_status columns.
+    """
+    status_columns_query = """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'rdmt_db'
+          AND table_name = $1
+          AND column_name LIKE '%\\_status' ESCAPE '\\'
+        ORDER BY column_name;
+    """
+    status_columns = [row[0] for row in conn.execute(status_columns_query, (table_name,)).fetchall()]
+
+    if not status_columns:
+        raise ValueError(f"No *_status columns found in table '{table_name}'.")
+
+    # Quote identifiers in case a status column name collides with SQL keywords.
+    return " AND ".join([f'"{column_name}" IN (-1, 1)' for column_name in status_columns])
+
+def generate_report_message(
+    duckdb_connection,
+    s3_parquet_bucket,
+    report_generation_time,
+    report_spec: ReportSpec,
+):
     """
     Orchestrate the creation of a RDMT SPIRE report message string.
 
@@ -197,6 +284,9 @@ def generate_report_message(duckdb_connection, s3_parquet_bucket, report_generat
     report_generation_time : str or datetime
         The specific timestamp used to filter the `monitor_end_datetime` 
         column in the dataset.
+    report_spec : ReportSpec
+        A dataclass instance containing report-type-specific configuration,
+        including table classes, column names, and reporting topic.
 
     Returns
     -------
@@ -209,8 +299,18 @@ def generate_report_message(duckdb_connection, s3_parquet_bucket, report_generat
     s3_parquet_file_path = os.path.join(s3_parquet_bucket, "*/*/*.parquet")
     # Query the same subset from the results table and extract evaluations that failed
 
-    eval_str = get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_generation_time)
-    info_str = get_monitored_files(duckdb_connection, s3_parquet_file_path, report_generation_time)
+    eval_str = get_failed_evaluations(
+        duckdb_connection,
+        s3_parquet_file_path,
+        report_generation_time,
+        report_spec,
+    )
+    info_str = get_monitored_files(
+        duckdb_connection,
+        s3_parquet_file_path,
+        report_generation_time,
+        report_spec,
+    )
 
     hline = "-"*40
     message = f"""
@@ -233,7 +333,12 @@ def generate_report_message(duckdb_connection, s3_parquet_bucket, report_generat
 
     return message
 
-def get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_generation_time):
+def get_failed_evaluations(
+    duckdb_connection,
+    s3_parquet_file_path,
+    report_generation_time,
+    report_spec: ReportSpec,
+):
     """
     Identify and format metric evaluations that failed (False) in a report.
 
@@ -252,6 +357,9 @@ def get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_gener
     report_generation_time : str or datetime
         The specific timestamp used to filter the `monitor_end_datetime` 
         column in the dataset.
+    report_spec : ReportSpec
+        A dataclass instance containing report-type-specific configuration,
+        including table classes, column names, and reporting topic.
 
     Returns
     -------
@@ -262,7 +370,7 @@ def get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_gener
         - Name of the failed metric
         - Value of the metric (formatted to 4 decimal places)
     """
-    metric_eval_pairs = L2ScienceResultsTable().get_metric_eval_pairs()
+    metric_eval_pairs = report_spec.results_table_class().get_metric_eval_pairs()
     unpivot_metric_list = ", ".join([f"({m}, {e}) AS '{m}'" for m, e in metric_eval_pairs])
 
     eval_check_str = f"""
@@ -277,8 +385,8 @@ def get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_gener
                 SELECT * 
                 FROM read_parquet('{s3_parquet_file_path}', hive_partitioning=true)
                 WHERE 
-                    obs_year_part = YEAR(exp_start_datetime)
-                    AND obs_month_part = MONTH(exp_start_datetime)
+                    obs_year_part = YEAR({report_spec.start_time_column})
+                    AND obs_month_part = MONTH({report_spec.start_time_column})
                     AND monitor_end_datetime = $1
             )
             ON {unpivot_metric_list}
@@ -297,7 +405,12 @@ def get_failed_evaluations(duckdb_connection, s3_parquet_file_path, report_gener
 
     return eval_str 
 
-def get_monitored_files(duckdb_connection, s3_parquet_file_path, report_generation_time):
+def get_monitored_files(
+    duckdb_connection,
+    s3_parquet_file_path,
+    report_generation_time,
+    report_spec: ReportSpec,
+):
     """
     Query Parquet files from S3 and format a file summary report string.
 
@@ -316,6 +429,9 @@ def get_monitored_files(duckdb_connection, s3_parquet_file_path, report_generati
     report_generation_time : str or datetime
         The specific timestamp used to filter the `monitor_end_datetime` 
         column in the dataset.
+    report_spec : ReportSpec
+        A dataclass instance containing report-type-specific configuration,
+        including table classes, column names, and reporting topic.
 
     Returns
     -------
@@ -328,19 +444,19 @@ def get_monitored_files(duckdb_connection, s3_parquet_file_path, report_generati
     """
     report_info_str = f"""
         SELECT 
-            CAST(exp_start_datetime AS DATE) AS obs_day, 
+            CAST({report_spec.start_time_column} AS DATE) AS obs_day, 
             reprocess_number,
             program_number,
-            observation_id,
+            {report_spec.summary_id_column},
             list(detector) as detector_list,
             COUNT(detector) as detector_count,
         FROM read_parquet('{s3_parquet_file_path}', hive_partitioning=true)
         WHERE 
-            obs_year_part = YEAR(exp_start_datetime)
-            AND obs_month_part = MONTH(exp_start_datetime)
+            obs_year_part = YEAR({report_spec.start_time_column})
+            AND obs_month_part = MONTH({report_spec.start_time_column})
             AND monitor_end_datetime = $1
-        GROUP BY obs_day, program_number, reprocess_number, observation_id
-        ORDER BY obs_day ASC, program_number ASC, reprocess_number ASC, observation_id ASC;
+        GROUP BY obs_day, program_number, reprocess_number, {report_spec.summary_id_column}
+        ORDER BY obs_day ASC, program_number ASC, reprocess_number ASC, {report_spec.summary_id_column} ASC;
     """
     info_result = duckdb_connection.execute(report_info_str, (report_generation_time,)).fetchall()
 
