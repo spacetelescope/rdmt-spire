@@ -242,7 +242,7 @@ def check_codepipeline_return(job_id, status, log_file_url=None):
 
     """
     if job_id is not None:
-        if status == StatusCodes.SUCCESS:
+        if (status == StatusCodes.SUCCESS) and (log_file_url is not None):
             logger.info(f"CodePipeline job {job_id} succeeded. Log file URL: {log_file_url}")
             try:
                 codepipeline_client.put_job_success_result(
@@ -261,5 +261,18 @@ def check_codepipeline_return(job_id, status, log_file_url=None):
                     }
                 )
         else:
-            logger.info(f"CodePipeline job {job_id} failed with status {status}.")
+            if status == StatusCodes.SUCCESS and (log_file_url is None):
+                failure_message = f"CodePipeline job {job_id} succeeded but no log file URL was provided."
+                logger.error(failure_message)
+            else:
+                failure_message = f"CodePipeline job {job_id} failed with status {status}."
+                logger.error(failure_message)
+
+            codepipeline_client.put_job_failure_result(
+                    jobId = job_id,
+                    failureDetails = {
+                        'type': 'JobFailed',
+                        'message': failure_message,
+                    }
+                )
             
