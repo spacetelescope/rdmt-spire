@@ -14,6 +14,7 @@ from ..constants.lambdas import (
     AWS_PARAMETER_PATH,
     DB_NAME,
     DB_SECRET_NAME,
+    GUIDE_WINDOW_MONITOR_QUEUE,
     NOISE_1F_MONITOR_QUEUE,
     MessageKeys,
 )
@@ -104,26 +105,43 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
 
     message_dict[MessageKeys.FUNCTION_TYPE] = 'monitor'
     message_dict[MessageKeys.REPROCESS_NUMBER] = reprocess_number
-    message_dict[MessageKeys.MONITOR_NAME] = 'noise_1f' # TODO: replace with 'essential'
 
     logger.info('Sending message...')
-    sqs = boto3.client("sqs", region_name='us-east-1')
+    sqs_client = boto3.client("sqs", region_name='us-east-1')
 
-    if message_dict[MessageKeys.FILE_TYPE] == 'science_wfi_level_2':
-            # TODO: replace this with the essential monitor queue after testing
-            sqs_url_for_testing_monitor = get_sqs_url(
-                params[NOISE_1F_MONITOR_QUEUE], 
-                account_id=aws_account_id,
-                sqs_client=sqs
-            )
-            try:
-                response = sqs.send_message(
-                    QueueUrl=sqs_url_for_testing_monitor,
-                    MessageBody=json.dumps(message_dict)
-                )
-                logger.info(f'Sent message. Response: {response}')
-            except Exception as e:
-                logger.error(f"Failed in sending message: {e}")
+    if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
+        # TODO: replace this with the essential monitor queue after testing
+        message_sqs_url = get_sqs_url(
+            params[NOISE_1F_MONITOR_QUEUE], 
+            account_id=aws_account_id,
+            sqs_client=sqs_client
+        )
+        logger.info('Ingesting L2 science file.')
+        message_dict[MessageKeys.MONITOR_NAME] = 'noise_1f' # TODO: replace with 'essential'
+
+    elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
+        message_sqs_url = get_sqs_url(
+            params[GUIDE_WINDOW_MONITOR_QUEUE], 
+            account_id=aws_account_id,
+            sqs_client=sqs_client
+        )
+        logger.info('Ingesting L1 guide window file.')
+        message_dict[MessageKeys.MONITOR_NAME] = 'guide_window'
+    else:
+        logger.error(f"Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
+        return {'statusCode': StatusCodes.UNEXPECTED_FILE_TYPE,
+                'body': [{'error_message': f'Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.'}]}
+    
+    try:
+        response = sqs_client.send_message(
+            QueueUrl=message_sqs_url,
+            MessageBody=json.dumps(message_dict)
+        )
+        logger.info(f'Sent message. Response: {response}')
+    except Exception as e:
+        logger.error(f"Failed in sending message: {e}")
+        return {'statusCode': StatusCodes.SQS_SEND_FAIL,
+                'body': [{'error_message': f'Failed in sending message: {e}'}]}
 
     logger.info(f'Successfully ingested {message_dict[MessageKeys.FILENAME]} (reprocess number = {reprocess_number}).')
     return {'statusCode': StatusCodes.SUCCESS,

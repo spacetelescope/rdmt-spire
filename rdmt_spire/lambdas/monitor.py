@@ -161,11 +161,15 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
        column exists; otherwise logs a warning without failing.
     2. If key observation-related fields have not yet been populated on the row
        (determined by a falsy ``observation_id``), initializes them from ``metadata_dict``:
-       - ``observation_id``
-       - ``exp_start_datetime`` (converted to timezone-aware UTC)
-       - ``romancal_version``
-       - ``crds_context``
-       - ``sdf_version``
+       For L2 science files:
+            - ``observation_id``
+            - ``exp_start_datetime`` (converted to timezone-aware UTC)
+            - ``romancal_version``
+            - ``crds_context``
+            - ``sdf_version``
+       For L1 guide window files:
+            - ``acq_start_datetime`` (converted to timezone-aware UTC)
+            - ``sdf_version``
     3. Flushes the session so changes are persisted to the current transaction.
 
     Parameters
@@ -208,11 +212,15 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
     else:
         logger.warning(f"Monitor ({monitor_name}) ran successfully, but {monitor_status_str} is not a column in the metadata table. Not updating status.")
     
-    if not meta_row.observation_id:
-        meta_row.observation_id = metadata_dict['observation']['observation_id']
-        meta_row.exp_start_datetime = metadata_dict['exposure']['start_time'].to_datetime(timezone=timezone.utc)
-        meta_row.romancal_version = metadata_dict['calibration_software_version']
-        meta_row.crds_context = metadata_dict['ref_file']['crds']['context']
-        meta_row.sdf_version = metadata_dict['sdf_software_version'] 
+    if not meta_row.sdf_version:
+        if metadata_table_class.file_type == FileTypes.L2_SCIENCE:
+            meta_row.observation_id = metadata_dict['observation']['observation_id']
+            meta_row.exp_start_datetime = metadata_dict['exposure']['start_time'].to_datetime(timezone=timezone.utc)
+            meta_row.romancal_version = metadata_dict['calibration_software_version']
+            meta_row.crds_context = metadata_dict['ref_file']['crds']['context']
+            meta_row.sdf_version = metadata_dict['sdf_software_version']
+        elif metadata_table_class.file_type == FileTypes.L1_GUIDE_WINDOW:
+            meta_row.acq_start_datetime = metadata_dict['meta']['start_time'].to_datetime(timezone=timezone.utc)
+            meta_row.sdf_version = metadata_dict['sdf_software_version']
 
     session.flush()

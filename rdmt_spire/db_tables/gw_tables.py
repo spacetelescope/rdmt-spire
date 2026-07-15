@@ -46,7 +46,7 @@ class L1GuideWindowMetaTable(Base):
     # -1 indicates the monitor should not be run
     # 0 indicates the monitor still needs to be run
     # 1 indicates the monitor ran successfully
-    monitor_status:         Mapped[int] = mapped_column(Integer(), default=0) # populated by Spire
+    guide_window_status:         Mapped[int] = mapped_column(Integer(), default=0) # populated by Spire
 
     def _get_verification_columns(self):
         return [
@@ -54,6 +54,7 @@ class L1GuideWindowMetaTable(Base):
             "reprocess_number",
             "program_number",
             "gw_acquisition_number",
+            "acquisition_id",
             "visit_id",
             "detector",
             "optical_element",
@@ -63,7 +64,7 @@ class L1GuideWindowMetaTable(Base):
             "dmd_notify_datetime",
             "sdf_version",
             "monitor_end_datetime",
-            "monitor_status",
+            "guide_window_status",
         ]
     
     @property
