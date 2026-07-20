@@ -15,9 +15,9 @@ from ..constants.lambdas import (
     AWS_SNS_TOPICS,
     DB_NAME,
     DB_SECRET_NAME,
+    GUIDE_WINDOW_REPORTING_TOPIC,
     PARQUET_FILE_BUCKET,
     SCIENCE_REPORTING_TOPIC,
-    GUIDE_WINDOW_REPORTING_TOPIC,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable, L1GuideWindowResultsTable
 from ..db_tables.sci_tables import L2ScienceMetaTable, L2ScienceResultsTable
