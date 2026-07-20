@@ -76,7 +76,7 @@ def _get_report_spec(report_type: str = FileTypes.L2_SCIENCE, params: dict = {})
         )
 
     raise ValueError(
-        f"Invalid report_type '{report_type}'. Must be 'science' or 'guide_window'."
+        f"Invalid report_type '{report_type}'. Must be '{FileTypes.L2_SCIENCE}' or '{FileTypes.L1_GUIDE_WINDOW}'."
     )
 
 def report_function(report_type: str = FileTypes.L2_SCIENCE):
@@ -95,7 +95,7 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
     Parameters
     ----------
     report_type : str
-        The type of report to generate either "science" or "guide_window". Defaults to FileTypes.L2_SCIENCE.
+        The type of report to generate either FileTypes.L2_SCIENCE or FileTypes.L1_GUIDE_WINDOW. Defaults to FileTypes.L2_SCIENCE.
 
     Returns
     -------

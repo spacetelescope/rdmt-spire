@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from ..constants.dmd import FileTypes
 from ..constants.lambdas import GUIDE_WINDOW_REPORTING_TOPIC, SCIENCE_REPORTING_TOPIC
 from ..lambdas.report import (
     _get_report_spec,
@@ -34,8 +35,8 @@ def test_get_report_spec_science_and_guide_window():
         GUIDE_WINDOW_REPORTING_TOPIC: "guide-window-topic",
     }
 
-    science_spec = _get_report_spec("science", params)
-    guide_window_spec = _get_report_spec("guide_window", params)
+    science_spec = _get_report_spec(FileTypes.L2_SCIENCE, params)
+    guide_window_spec = _get_report_spec(FileTypes.L1_GUIDE_WINDOW, params)
 
     assert science_spec.start_time_column == "exp_start_datetime"
     assert science_spec.summary_id_column == "observation_id"
@@ -48,7 +49,7 @@ def test_get_report_spec_science_and_guide_window():
 
 def test_get_failed_evaluations_uses_report_specific_columns():
     params = {GUIDE_WINDOW_REPORTING_TOPIC: "guide-window-topic"}
-    report_spec = _get_report_spec("guide_window", params)
+    report_spec = _get_report_spec(FileTypes.L1_GUIDE_WINDOW, params)
     report_time = datetime(2026, 7, 8, 12, 0, 0)
     connection = _FakeDuckDBConnection(
         [("file.asdf", 2, "mean_noise", 1.23456, False)]
@@ -68,7 +69,7 @@ def test_get_failed_evaluations_uses_report_specific_columns():
 
 def test_get_monitored_files_uses_report_specific_summary_column():
     params = {GUIDE_WINDOW_REPORTING_TOPIC: "guide-window-topic"}
-    report_spec = _get_report_spec("guide_window", params)
+    report_spec = _get_report_spec(FileTypes.L1_GUIDE_WINDOW, params)
     report_time = datetime(2026, 7, 8, 12, 0, 0)
     connection = _FakeDuckDBConnection(
         [(datetime(2026, 7, 8).date(), 1, 42, 7, ["wfi01", "wfi03"], 2)]
