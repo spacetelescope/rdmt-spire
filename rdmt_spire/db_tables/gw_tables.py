@@ -55,6 +55,7 @@ class L1GuideWindowMetaTable(Base):
             "program_number",
             "gw_acquisition_number",
             "acquisition_id",
+            "acq_start_datetime",
             "visit_id",
             "detector",
             "optical_element",
@@ -67,10 +68,8 @@ class L1GuideWindowMetaTable(Base):
             "guide_window_status",
         ]
     
-    @property
-    def file_type(self):
-        # Used for mapping the table classes to the file types they relate to
-        return FileTypes.L1_GUIDE_WINDOW
+    # Used for mapping the table classes to the file types they relate to
+    file_type = FileTypes.L1_GUIDE_WINDOW
 
 
 class L1GuideWindowResultsTable(ResultsBase):
@@ -150,7 +149,5 @@ class L1GuideWindowResultsTable(ResultsBase):
             "rms_centroid_offset_eval",
         ]
 
-    @property
-    def file_type(self):
-        # Used for mapping the table classes to the file types they relate to
-        return FileTypes.L1_GUIDE_WINDOW
+    # Used for mapping the table classes to the file types they relate to
+    file_type = FileTypes.L1_GUIDE_WINDOW

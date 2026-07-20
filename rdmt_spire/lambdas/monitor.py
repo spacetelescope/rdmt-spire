@@ -1,3 +1,4 @@
+import copy
 import logging
 from datetime import timezone
 
@@ -74,7 +75,7 @@ def monitor_function(message_dict):
     logger.info('Finished monitor execution.')
 
     # clean up memory
-    metadata_dict = af['roman']['meta']
+    metadata_dict = copy.deepcopy(af['roman']['meta'])
     af.close()
     del content
 
@@ -213,6 +214,7 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
         logger.warning(f"Monitor ({monitor_name}) ran successfully, but {monitor_status_str} is not a column in the metadata table. Not updating status.")
     
     if not meta_row.sdf_version:
+        logger.info("Metadata row is missing key fields; populating from ASDF metadata.")
         if metadata_table_class.file_type == FileTypes.L2_SCIENCE:
             meta_row.observation_id = metadata_dict['observation']['observation_id']
             meta_row.exp_start_datetime = metadata_dict['exposure']['start_time'].to_datetime(timezone=timezone.utc)
@@ -220,7 +222,9 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
             meta_row.crds_context = metadata_dict['ref_file']['crds']['context']
             meta_row.sdf_version = metadata_dict['sdf_software_version']
         elif metadata_table_class.file_type == FileTypes.L1_GUIDE_WINDOW:
-            meta_row.acq_start_datetime = metadata_dict['meta']['start_time'].to_datetime(timezone=timezone.utc)
+            meta_row.acq_start_datetime = metadata_dict['t_start'].to_datetime(timezone=timezone.utc)
             meta_row.sdf_version = metadata_dict['sdf_software_version']
+        else:
+            logger.warning(f"Metadata table class {metadata_table_class.__name__} has unrecognized file type {metadata_table_class.file_type}. Not populating metadata fields.")
 
     session.flush()

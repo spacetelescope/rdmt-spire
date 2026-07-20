@@ -7,6 +7,7 @@ import boto3
 import duckdb
 
 from ..constants.codes import StatusCodes
+from ..constants.dmd import FileTypes
 from ..constants.lambdas import (
     AWS_DBS,
     AWS_PARAMETER_PATH,
@@ -33,10 +34,12 @@ tab_str = "    "
 class ReportSpec:
     """Configuration for report-type-specific table and column behavior."""
 
+    dataset_prefix: str
     meta_table_class: type
+    parquet_file_prefix: str
+    reporting_topic_name: str
     results_table_class: type
     start_time_column: str
-    reporting_topic_name: str
     summary_id_column: str
 
     @property
@@ -48,25 +51,27 @@ class ReportSpec:
         return self.results_table_class.__tablename__
 
 
-def _get_report_spec(report_type: str, params: dict) -> ReportSpec:
+def _get_report_spec(report_type: str = FileTypes.L2_SCIENCE, params: dict = {}) -> ReportSpec:
     """Return the report configuration for the requested report type."""
-    normalized_report_type = report_type.lower()
-
-    if normalized_report_type == "science":
+    if report_type == FileTypes.L2_SCIENCE:
         return ReportSpec(
+            dataset_prefix="science",
             meta_table_class=L2ScienceMetaTable,
+            parquet_file_prefix="rdmt_db_{uuid}", # define prefix followed by unique ID, intentionally not an f-string
+            reporting_topic_name=params[SCIENCE_REPORTING_TOPIC],
             results_table_class=L2ScienceResultsTable,
             start_time_column="exp_start_datetime",
-            reporting_topic_name=params[SCIENCE_REPORTING_TOPIC],
             summary_id_column="observation_id",
         )
 
-    if normalized_report_type == "guide_window":
+    elif report_type == FileTypes.L1_GUIDE_WINDOW:
         return ReportSpec(
+            dataset_prefix="guide_window",
             meta_table_class=L1GuideWindowMetaTable,
+            parquet_file_prefix="rdmt_gw_db_{uuid}", # define prefix followed by unique ID, intentionally not an f-string
+            reporting_topic_name=params[GUIDE_WINDOW_REPORTING_TOPIC],
             results_table_class=L1GuideWindowResultsTable,
             start_time_column="acq_start_datetime",
-            reporting_topic_name=params[GUIDE_WINDOW_REPORTING_TOPIC],
             summary_id_column="acquisition_id",
         )
 
@@ -74,7 +79,7 @@ def _get_report_spec(report_type: str, params: dict) -> ReportSpec:
         f"Invalid report_type '{report_type}'. Must be 'science' or 'guide_window'."
     )
 
-def report_function(report_type: str = "science"):
+def report_function(report_type: str = FileTypes.L2_SCIENCE):
     """
     Orchestrates the extraction, transformation, and reporting of RDMT file 
     metadata, metrics and evaluations.
@@ -90,7 +95,7 @@ def report_function(report_type: str = "science"):
     Parameters
     ----------
     report_type : str
-        The type of report to generate either "science" or "guide_window". Defaults to "science".
+        The type of report to generate either "science" or "guide_window". Defaults to FileTypes.L2_SCIENCE.
 
     Returns
     -------
@@ -159,12 +164,17 @@ def report_function(report_type: str = "science"):
 
         if num_reported_rows > 0:
             # Package metadata and results data into Parquet dataset
-            s3_parquet_bucket_path = f"s3://{params[PARQUET_FILE_BUCKET]}/"
+            s3_dataset_prefix = f"{report_spec.dataset_prefix}/"
+            s3_parquet_bucket_path = f"s3://{params[PARQUET_FILE_BUCKET]}/{s3_dataset_prefix}"
 
             # Check if we should create the parquet structure or append to it
             s3_client = boto3.client('s3')
-            response = s3_client.list_objects_v2(Bucket=params[PARQUET_FILE_BUCKET], MaxKeys=1)
-            # If there are already files in the bucket
+            response = s3_client.list_objects_v2(
+                Bucket=params[PARQUET_FILE_BUCKET],
+                Prefix=s3_dataset_prefix,
+                MaxKeys=1,
+            )
+            # If there are already files in this dataset prefix
             if 'Contents' in response:
                 parquet_command = ", APPEND"
                 logger.info('Parquet dataset exists. Appending new rows.')
@@ -173,7 +183,6 @@ def report_function(report_type: str = "science"):
                 logger.info('Parquet dataset does not exist. Creating new dataset.')
 
             # TODO: We might want to sort the exported Parquet file by visit id or obs id or program to speed up queries
-            parquet_file_pattern = "rdmt_db_{uuid}" # define prefix followed by unique ID, intentionally not an f-string
             parquet_export_str = f"""
                 COPY (
                     SELECT 
@@ -187,7 +196,7 @@ def report_function(report_type: str = "science"):
                     WHERE M.monitor_end_datetime = $1
                 ) 
                 TO '{s3_parquet_bucket_path}' 
-                (FORMAT PARQUET, PARTITION_BY (obs_year_part, obs_month_part) {parquet_command}, FILENAME_PATTERN '{parquet_file_pattern}');
+                (FORMAT PARQUET, PARTITION_BY (obs_year_part, obs_month_part) {parquet_command}, FILENAME_PATTERN '{report_spec.parquet_file_prefix}');
             """
             conn.execute(parquet_export_str, (report_time,))
             logger.info("Saved parquet file to dataset.")
@@ -223,12 +232,26 @@ def report_function(report_type: str = "science"):
 
     except Exception as e:
         logger.error(f"{e}")
-        if conn is not None:
-            databases = conn.sql("SHOW DATABASES").fetchall()
-            if ('rdmt_db',) in databases:
-                conn.execute("DETACH rdmt_db;")
-            conn.close()
         raise e
+    finally:
+        if conn is not None:
+            try:
+                databases = conn.sql("SHOW DATABASES").fetchall()
+                db_names = [row[0] for row in databases]
+
+                if "rdmt_db" in db_names:
+                    fallback_db = next((name for name in db_names if name != "rdmt_db"), None)
+                    if fallback_db is not None:
+                        conn.execute(f"USE {fallback_db};")
+                    else:
+                        # If rdmt_db is the only visible database, create one to switch into.
+                        conn.execute("ATTACH ':memory:' AS fallback_db;")
+                        conn.execute("USE fallback_db;")
+                    conn.execute("DETACH rdmt_db;")
+            except Exception as cleanup_error:
+                logger.warning(f"DuckDB cleanup warning: {cleanup_error}")
+            finally:
+                conn.close()
 
     logger.info("Successfully finished reporting lambda.")
     return {'statusCode': StatusCodes.SUCCESS,
@@ -247,9 +270,8 @@ def _status_columns_ready_condition(conn, table_name: str) -> str:
     status_columns_query = """
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_schema = 'rdmt_db'
-          AND table_name = $1
-          AND column_name LIKE '%\\_status' ESCAPE '\\'
+        WHERE table_name = $1
+          AND column_name LIKE '%_status'
         ORDER BY column_name;
     """
     status_columns = [row[0] for row in conn.execute(status_columns_query, (table_name,)).fetchall()]
@@ -297,6 +319,7 @@ def generate_report_message(
     
     """
     s3_parquet_file_path = os.path.join(s3_parquet_bucket, "*/*/*.parquet")
+    logger.info(f"Generating report message for parquet files at: {s3_parquet_file_path}")
     # Query the same subset from the results table and extract evaluations that failed
 
     eval_str = get_failed_evaluations(
@@ -371,37 +394,52 @@ def get_failed_evaluations(
         - Value of the metric (formatted to 4 decimal places)
     """
     metric_eval_pairs = report_spec.results_table_class().get_metric_eval_pairs()
-    unpivot_metric_list = ", ".join([f"({m}, {e}) AS '{m}'" for m, e in metric_eval_pairs])
+    select_clauses = "\nUNION ALL\n".join(
+        [
+            f"""SELECT
+                filename,
+                reprocess_number,
+                '{m}' AS metric_name,
+                CAST({m} AS VARCHAR(30)) AS metric_value,
+                {e} AS evaluation
+            FROM filtered_data"""
+            for m, e in metric_eval_pairs
+        ]
+    )
 
     eval_check_str = f"""
+        WITH filtered_data AS (
+            SELECT *
+            FROM read_parquet('{s3_parquet_file_path}', hive_partitioning=true)
+            WHERE
+                obs_year_part = YEAR({report_spec.start_time_column})
+                AND obs_month_part = MONTH({report_spec.start_time_column})
+                AND monitor_end_datetime = $1
+        )
         SELECT
             filename,
             reprocess_number,
             metric_name,
             metric_value,
             evaluation
-        FROM (
-            UNPIVOT (
-                SELECT * 
-                FROM read_parquet('{s3_parquet_file_path}', hive_partitioning=true)
-                WHERE 
-                    obs_year_part = YEAR({report_spec.start_time_column})
-                    AND obs_month_part = MONTH({report_spec.start_time_column})
-                    AND monitor_end_datetime = $1
-            )
-            ON {unpivot_metric_list}
-            INTO
-                NAME metric_name
-                VALUE (metric_value, evaluation)
-        )
+        FROM ({select_clauses})
         WHERE evaluation = False;
     """
     eval_result = duckdb_connection.execute(eval_check_str, (report_generation_time,)).fetchall()
 
+    logger.info(f"Number of failed evaluations: {len(eval_result)}")
+
     eval_str = ""
     for row in eval_result:
         filename, rep_num, metric_name, metric_value, _ = row
-        eval_str += f"{filename} (rep # {rep_num})  >>  {metric_name} = {metric_value:.4f}\n" + tab_str
+        try:
+            metric_value_display = f"{float(metric_value):.4f}"
+        except (TypeError, ValueError):
+            metric_value_display = str(metric_value)
+        eval_str += (
+            f"{filename} (rep # {rep_num})  >>  {metric_name} = {metric_value_display}\n"
+            + tab_str
+        )
 
     return eval_str 
 
@@ -459,6 +497,8 @@ def get_monitored_files(
         ORDER BY obs_day ASC, program_number ASC, reprocess_number ASC, {report_spec.summary_id_column} ASC;
     """
     info_result = duckdb_connection.execute(report_info_str, (report_generation_time,)).fetchall()
+    logger.info(f"Number of monitored file summaries: {len(info_result)}")
+    logger.info(f"Monitored file summaries: {info_result}")
 
     info_str = ""
     print_day = None

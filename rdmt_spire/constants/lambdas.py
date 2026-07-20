@@ -66,3 +66,4 @@ class MessageKeys(StrEnum):
     REPROCESS_NUMBER = "reprocess_number"
 
     METADATA_CHECK_TYPE = 'metadata_check_type'
+    REPORT_TYPE = 'report_type'
