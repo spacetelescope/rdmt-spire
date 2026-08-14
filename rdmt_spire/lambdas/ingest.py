@@ -16,7 +16,6 @@ from ..constants.lambdas import (
     DB_SECRET_NAME,
     ESSENTIAL_L2_MONITOR_QUEUE,
     GUIDE_WINDOW_MONITOR_QUEUE,
-    NOISE_1F_MONITOR_QUEUE,
     MessageKeys,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable
