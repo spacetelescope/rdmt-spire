@@ -258,20 +258,11 @@ def load_file_object(bucket_name: str, key_name: str, mode: str = "rb"):
 
     try:
         return load_s3_object(bucket_name, key_name)
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code")
-        if error_code in ['InvalidAccessKeyId']:
-            # Forbidden error — fall back to local filesystem
-            if os.path.exists(local_path):
-                with open(local_path, mode=mode) as fp:
-                    return io.BytesIO(fp.read())
-            raise FileNotFoundError(f"File not found at local path: {local_path}")
-        else:
-            # on AWS but S3 couldn't find or serve the object
-            raise FileNotFoundError(f"File not found in S3: s3://{bucket_name}/{key_name}")
-    except (ParamValidationError, NoCredentialsError):
-        # Local path (absolute beginning with slash, or relative with no credentials) —
-        # fall back to local filesystem
+    except (ClientError, ParamValidationError, NoCredentialsError):
+        # ClientError: S3 returned an error (e.g., no such key, forbidden)
+        # ParamValidationError: bucket_name looks like a local absolute path
+        # NoCredentialsError: no AWS credentials available (e.g., local/CI environment)
+        # In all cases, fall back to the local filesystem
         if os.path.exists(local_path):
             with open(local_path, mode=mode) as fp:
                 return io.BytesIO(fp.read())
