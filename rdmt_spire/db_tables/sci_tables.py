@@ -32,6 +32,7 @@ class L2ScienceMetaTable(Base):
     # 0 for prompt (reprocessingState = None), 
     # +1 for each reprocessing (reprocessingState = 'reprocessed' or 'data_release')
     program_number:         Mapped[int] = mapped_column(Integer()) # from filename
+    visit_number:           Mapped[int] = mapped_column(Integer(), server_default="0") # from filename
     exposure_number:        Mapped[int] = mapped_column(Integer()) # from filename
     visit_id:               Mapped[str] = mapped_column(String(VISIT_ID_LENGTH)) # from filename
     detector:               Mapped[str] = mapped_column(String(DETECTOR_LENGTH)) # from filename
