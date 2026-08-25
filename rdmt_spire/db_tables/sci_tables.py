@@ -15,6 +15,10 @@ from ..constants.database import (
     VISIT_ID_LENGTH,
 )
 from ..constants.dmd import FileTypes
+from ..constants.source_catalog_constants import (
+    SOURCE_CATALOG_PROPERTIES,
+    SOURCE_CATALOG_STATISTICS,
+)
 from .base import Base, ResultsBase
 
 
@@ -53,8 +57,10 @@ class L2ScienceMetaTable(Base):
     # -1 indicates the monitor should not be run
     # -2 indicates the monitor may need to be run depending on the metadata checks
     essential_status:       Mapped[int] = mapped_column(Integer(), default=0) # populated by Spire
+    
     # periodic monitors are run on a schedule and may not be run for every file. The status is set to -1 if the monitor should not be run for this file.   
     astrometry_status:      Mapped[int] = mapped_column(Integer(), default=-2) # populated by Spire
+    source_catalog_status:  Mapped[int] = mapped_column(Integer(), default=-2) # populated by Spire
 
     def _get_verification_columns(self):
         return [
@@ -78,12 +84,44 @@ class L2ScienceMetaTable(Base):
             "monitor_end_datetime",
             "essential_status",
             "astrometry_status",
+            "source_catalog_status",
         ]
     
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L2_SCIENCE
 
 
+def _add_science_results_columns(cls):
+    # This function dynamically adds columns to the class 
+    # for science results based on the properties defined in monitors 
+
+    # We start with source_catalog monitor properties 
+    # One can add properties from other monitors if need be 
+    properties = SOURCE_CATALOG_PROPERTIES
+    statistics = SOURCE_CATALOG_STATISTICS
+
+    # we iterate over each property and each statistic
+    for prop in properties:
+        for stat_name in statistics:
+            if stat_name == "n_sources":
+                col_type = Integer()
+                py_type = Optional[int]
+            else:
+                col_type = Float()
+                py_type = Optional[float]
+
+            # Construct the column name and add it to the class annotations and mapped columns
+            name = f"{prop}_{stat_name}"
+            cls.__annotations__[name] = Mapped[py_type]
+            setattr(cls, name, mapped_column(col_type))
+
+            # Construct the evaluation column name and add it to the class annotations and mapped columns
+            cls.__annotations__[name+'_eval'] = Mapped[Optional[bool]]            
+            setattr(cls, name+'_eval', mapped_column(Boolean()))
+
+    return cls
+
+@_add_science_results_columns
 class L2ScienceResultsTable(ResultsBase):
     """Class containing schema for the L2 Science data monitoring results table."""
 
@@ -153,9 +191,10 @@ class L2ScienceResultsTable(ResultsBase):
     p95_ramp_value_eval:   Mapped[Optional[bool]]  = mapped_column(Boolean())
     p05_ramp_value:        Mapped[Optional[float]] = mapped_column(Float())
     p05_ramp_value_eval:   Mapped[Optional[bool]]  = mapped_column(Boolean())
+    
 
     def _get_verification_columns(self):
-        return [
+        cols = [
             "filename",
             "reprocess_number",
             "astrometric_offset",
@@ -211,6 +250,14 @@ class L2ScienceResultsTable(ResultsBase):
             "p05_ramp_value",
             "p05_ramp_value_eval",
         ]
+
+        for prop in SOURCE_CATALOG_PROPERTIES:
+            for stat_name in SOURCE_CATALOG_STATISTICS:
+                cols.append(f"{prop}_{stat_name}")
+                cols.append(f"{prop}_{stat_name}_eval")
+
+        return cols
+    
 
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L2_SCIENCE
