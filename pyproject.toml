@@ -35,6 +35,8 @@ dependencies = [
     "pyyaml",
     "sqlalchemy",
     "stpsf",
+    "python-dotenv",
+    "astropy-healpix",
 ]
 license-files = ["LICENSE"]
 dynamic = [
