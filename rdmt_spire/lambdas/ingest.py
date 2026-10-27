@@ -23,6 +23,7 @@ from ..constants.lambdas import (
     WIM_EXPOSURE,
     WSM_EXPOSURE,
     FLAT_EXPOSURE,
+    MonitorNames,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable
 from ..db_tables.sci_tables import L2ScienceMetaTable
@@ -116,14 +117,24 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
     sqs_client = boto3.client("sqs", region_name='us-east-1')
 
     if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
-        # TODO: replace this with the essential monitor queue after testing
         message_sqs_url = get_sqs_url(
             params[ESSENTIAL_L2_MONITOR_QUEUE],
             account_id=aws_account_id,
             sqs_client=sqs_client
         )
-        logger.info('Ingesting L2 science file.')
-        message_dict[MessageKeys.MONITOR_NAME] = 'essential'
+        # Determine which essential monitor to use
+        if meta_table.exposure_type == WIM_EXPOSURE:
+            essential_monitor_name = MonitorNames.ESSENTIAL_WIM
+        elif meta_table.exposure_type == WSM_EXPOSURE:
+            essential_monitor_name = MonitorNames.ESSENTIAL_WSM
+        elif meta_table.exposure_type == FLAT_EXPOSURE:
+            essential_monitor_name = MonitorNames.ESSENTIAL_FLAT
+        else:
+            logger.error(f"Unexpected exposure type: {meta_table.exposure_type}")
+            return {'statusCode': StatusCodes.UNEXPECTED_EXPOSURE_TYPE,
+                    'body': [{'error_message': f'Unexpected exposure type for L2 Science File: {meta_table.exposure_type}'}]}
+        logger.info(f'Running {essential_monitor_name} on L2 science file.')
+        message_dict[MessageKeys.MONITOR_NAME] = essential_monitor_name
 
     elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
         message_sqs_url = get_sqs_url(
@@ -132,7 +143,7 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             sqs_client=sqs_client
         )
         logger.info('Ingesting L1 guide window file.')
-        message_dict[MessageKeys.MONITOR_NAME] = 'guide_window'
+        message_dict[MessageKeys.MONITOR_NAME] = MonitorNames.GUIDE_WINDOW
     else:
         logger.error(f"Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
         return {'statusCode': StatusCodes.UNEXPECTED_FILE_TYPE,

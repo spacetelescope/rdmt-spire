@@ -93,3 +93,9 @@ class MessageKeys(StrEnum):
 
     METADATA_CHECK_TYPE = 'metadata_check_type'
     REPORT_TYPE = 'report_type'
+
+class MonitorNames(StrEnum):
+    ESSENTIAL_WIM = "essential_wim"
+    ESSENTIAL_WSM = "essential_wsm"
+    ESSENTIAL_FLAT = "essential_flat"
+    GUIDE_WINDOW = "guide_window"
