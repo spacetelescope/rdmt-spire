@@ -15,14 +15,14 @@ from ..constants.lambdas import (
     DB_NAME,
     DB_SECRET_NAME,
     ESSENTIAL_L2_MONITOR_QUEUE,
+    FLAT_EXPOSURE,
     GUIDE_WINDOW_MONITOR_QUEUE,
-    MessageKeys,
+    L2_SCIENCE_FLAT_EXPOSURE_TYPES,
     L2_SCIENCE_WIM_EXPOSURE_TYPES,
     L2_SCIENCE_WSM_EXPOSURE_TYPES,
-    L2_SCIENCE_FLAT_EXPOSURE_TYPES,
     WIM_EXPOSURE,
     WSM_EXPOSURE,
-    FLAT_EXPOSURE,
+    MessageKeys,
     MonitorNames,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable
