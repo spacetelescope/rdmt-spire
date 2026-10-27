@@ -221,10 +221,16 @@ def create_table_class_from_message(message_dict):
         meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
         if exposure_type in L2_SCIENCE_WIM_EXPOSURE_TYPES:
             meta_table.exposure_type = WIM_EXPOSURE
+            meta_table.astrometry_status = -2 # These monitors should be run on WIM data
+            meta_table.source_catalog_status = -2
         elif exposure_type in L2_SCIENCE_WSM_EXPOSURE_TYPES:
             meta_table.exposure_type = WSM_EXPOSURE
+            meta_table.astrometry_status = -1 # These monitors should NOT be run on WSM data
+            meta_table.source_catalog_status = -1
         elif exposure_type in L2_SCIENCE_FLAT_EXPOSURE_TYPES:
             meta_table.exposure_type = FLAT_EXPOSURE
+            meta_table.astrometry_status = -1 # These monitors should NOT be run on FLAT data
+            meta_table.source_catalog_status = -1
 
         # Save metadata from the filename
         obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L2_SCIENCE)
