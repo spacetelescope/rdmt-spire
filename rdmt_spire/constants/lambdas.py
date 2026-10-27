@@ -1,7 +1,7 @@
 import os
 from enum import StrEnum
 
-from dmd import ExposureTypes
+from .dmd import ExposureTypes
 
 # AWS Parameter store path and parameter names
 prefix = os.getenv("PROFILE_NAME_PREFIX", "rdmt")
