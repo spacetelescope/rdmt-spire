@@ -1,5 +1,6 @@
 import os
 from enum import StrEnum
+from dmd import ExposureTypes
 
 # AWS Parameter store path and parameter names
 prefix = os.getenv("PROFILE_NAME_PREFIX", "rdmt")
@@ -51,6 +52,24 @@ AWS_DBS = [
     DB_SECRET_NAME,
 ]
 
+# Valid exposure types for L2 science monitors
+L2_SCIENCE_WIM_EXPOSURE_TYPES = [
+    ExposureTypes.WFI_IMAGE,
+]
+L2_SCIENCE_WSM_EXPOSURE_TYPES = [
+    ExposureTypes.WFI_SPECTRAL,
+    ExposureTypes.WFI_GRISM,
+    ExposureTypes.WFI_PRISM,
+]
+L2_SCIENCE_FLAT_EXPOSURE_TYPES = [
+    ExposureTypes.WFI_FLAT,
+]
+
+# Define valid exposure type strings for within Spire itself
+WIM_EXPOSURE = "WIM"
+WSM_EXPOSURE = "WSM"
+FLAT_EXPOSURE = "FLAT"
+
 
 class FunctionTypes(StrEnum):
     MONITOR = "monitor"
@@ -65,6 +84,7 @@ class MessageKeys(StrEnum):
     FILE_CREATION_TIMESTAMP = "fileCreationTimestamp"
     FILENAME = "filename"
     REPROCESSING_STATE = "reprocessingState"
+    EXPOSURE_TYPE = "exposureType"
 
     # The following keys are only used within Spire itself
     FUNCTION_TYPE = "function_type"

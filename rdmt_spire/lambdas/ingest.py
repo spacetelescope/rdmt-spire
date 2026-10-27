@@ -17,6 +17,12 @@ from ..constants.lambdas import (
     ESSENTIAL_L2_MONITOR_QUEUE,
     GUIDE_WINDOW_MONITOR_QUEUE,
     MessageKeys,
+    L2_SCIENCE_WIM_EXPOSURE_TYPES,
+    L2_SCIENCE_WSM_EXPOSURE_TYPES,
+    L2_SCIENCE_FLAT_EXPOSURE_TYPES,
+    WIM_EXPOSURE,
+    WSM_EXPOSURE,
+    FLAT_EXPOSURE,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable
 from ..db_tables.sci_tables import L2ScienceMetaTable
@@ -188,12 +194,26 @@ def create_table_class_from_message(message_dict):
 
     """
     if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
+        # Confirm the exposure type is expected values
+        exposure_type = message_dict[MessageKeys.EXPOSURE_TYPE]
+        if exposure_type not in (
+            L2_SCIENCE_WIM_EXPOSURE_TYPES +
+            L2_SCIENCE_WSM_EXPOSURE_TYPES +
+            L2_SCIENCE_FLAT_EXPOSURE_TYPES
+        ):
+            raise ValueError(f"Unexpected exposure type in L2 science file message: {exposure_type}")
         meta_table = L2ScienceMetaTable()
         # Save metadata from DMD notification
         meta_table.filename = message_dict[MessageKeys.FILENAME]
         meta_table.archive_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
         meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
         meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+        if exposure_type in L2_SCIENCE_WIM_EXPOSURE_TYPES:
+            meta_table.exposure_type = WIM_EXPOSURE
+        elif exposure_type in L2_SCIENCE_WSM_EXPOSURE_TYPES:
+            meta_table.exposure_type = WSM_EXPOSURE
+        elif exposure_type in L2_SCIENCE_FLAT_EXPOSURE_TYPES:
+            meta_table.exposure_type = FLAT_EXPOSURE
 
         # Save metadata from the filename
         obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L2_SCIENCE)

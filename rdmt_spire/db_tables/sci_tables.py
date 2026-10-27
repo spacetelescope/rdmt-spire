@@ -41,6 +41,7 @@ class L2ScienceMetaTable(Base):
     visit_id:               Mapped[str] = mapped_column(String(VISIT_ID_LENGTH)) # from filename
     detector:               Mapped[str] = mapped_column(String(DETECTOR_LENGTH)) # from filename
     optical_element:        Mapped[str] = mapped_column(String(OPTICAL_ELEMENT_LENGTH)) # from filename
+    exposure_type:          Mapped[str] = mapped_column(String(EXPOSURE_TYPE_LENGTH)) # WIM, WSM, or FLAT
     archive_bucket:         Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveBucket']
     archive_key:            Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveObjectKey']
     file_created_datetime:  Mapped[datetime] = mapped_column(DateTime()) # from body['fileCreationTimestamp']
