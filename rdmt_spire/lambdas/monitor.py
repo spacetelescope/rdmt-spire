@@ -16,6 +16,7 @@ from ..constants.lambdas import (
     DB_SECRET_NAME,
     SOURCE_CATALOG_MONITOR_DATA_BUCKET,
     MessageKeys,
+    MonitorNames,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable, L1GuideWindowResultsTable
 from ..db_tables.sci_tables import L2ScienceMetaTable, L2ScienceResultsTable
@@ -145,11 +146,11 @@ def generate_monitor_config(message_dict, params):
     """
     monitor_config = {}
     
-    if message_dict[MessageKeys.MONITOR_NAME] == "astrometry":
+    if message_dict[MessageKeys.MONITOR_NAME] == MonitorNames.ASTROMETRY:
         monitor_config["astrometry"] = {
             "datadir": params[ASTROMETRY_MONITOR_DATA_BUCKET]
         }
-    elif message_dict[MessageKeys.MONITOR_NAME] == "source_catalog":
+    elif message_dict[MessageKeys.MONITOR_NAME] == MonitorNames.SOURCE_CATALOG:
         monitor_config["source_catalog"] = {
             "datadir": params[SOURCE_CATALOG_MONITOR_DATA_BUCKET]
         }

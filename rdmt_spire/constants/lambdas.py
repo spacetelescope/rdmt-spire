@@ -94,8 +94,11 @@ class MessageKeys(StrEnum):
     METADATA_CHECK_TYPE = 'metadata_check_type'
     REPORT_TYPE = 'report_type'
 
+# Monitor names for use within Spire itself. These are only then names of monitors triggered by lambda functions
 class MonitorNames(StrEnum):
     ESSENTIAL_WIM = "essential_wim"
     ESSENTIAL_WSM = "essential_wsm"
     ESSENTIAL_FLAT = "essential_flat"
-    GUIDE_WINDOW = "guide_window"
+    ESSENTIAL_GW = "essential_guide_window"
+    ASTROMETRY = "astrometry"
+    SOURCE_CATALOG = "source_catalog"
