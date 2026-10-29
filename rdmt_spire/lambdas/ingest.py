@@ -15,15 +15,12 @@ from ..constants.lambdas import (
     DB_NAME,
     DB_SECRET_NAME,
     ESSENTIAL_L2_MONITOR_QUEUE,
-    FLAT_EXPOSURE,
+    ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE,
     GUIDE_WINDOW_MONITOR_QUEUE,
-    L2_SCIENCE_FLAT_EXPOSURE_TYPES,
-    L2_SCIENCE_WIM_EXPOSURE_TYPES,
-    L2_SCIENCE_WSM_EXPOSURE_TYPES,
-    WIM_EXPOSURE,
-    WSM_EXPOSURE,
+    L2_SCIENCE_EXPOSURE_CONFIG,
+    VALID_L2_SCIENCE_EXPOSURE_TYPES,
     MessageKeys,
-    MonitorNames,
+    MonitorGroupName,
 )
 from ..db_tables.gw_tables import L1GuideWindowMetaTable
 from ..db_tables.sci_tables import L2ScienceMetaTable
@@ -126,12 +123,8 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             sqs_client=sqs_client
         )
         # Determine which essential monitor to use
-        if exposure_type == WIM_EXPOSURE:
-            essential_monitor_name = MonitorNames.ESSENTIAL_WIM
-        elif exposure_type == WSM_EXPOSURE:
-            essential_monitor_name = MonitorNames.ESSENTIAL_WSM
-        elif exposure_type == FLAT_EXPOSURE:
-            essential_monitor_name = MonitorNames.ESSENTIAL_FLAT
+        if exposure_type in ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE:
+            essential_monitor_name = ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE[exposure_type]
         else:
             logger.error(f"Unexpected exposure type: {exposure_type}")
             return {'statusCode': StatusCodes.UNEXPECTED_EXPOSURE_TYPE,
@@ -146,7 +139,7 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             sqs_client=sqs_client
         )
         logger.info('Ingesting L1 guide window file.')
-        message_dict[MessageKeys.MONITOR_NAME] = MonitorNames.GUIDE_WINDOW
+        message_dict[MessageKeys.MONITOR_NAME] = MonitorGroupName.ESSENTIAL_GW
     else:
         logger.error(f"Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
         return {'statusCode': StatusCodes.UNEXPECTED_FILE_TYPE,
@@ -210,11 +203,7 @@ def create_table_class_from_message(message_dict):
     if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
         # Confirm the exposure type is expected values
         exposure_type = message_dict[MessageKeys.EXPOSURE_TYPE]
-        if exposure_type not in (
-            L2_SCIENCE_WIM_EXPOSURE_TYPES +
-            L2_SCIENCE_WSM_EXPOSURE_TYPES +
-            L2_SCIENCE_FLAT_EXPOSURE_TYPES
-        ):
+        if exposure_type not in VALID_L2_SCIENCE_EXPOSURE_TYPES:
             raise ValueError(f"Unexpected exposure type in L2 science file message: {exposure_type}")
         meta_table = L2ScienceMetaTable()
         # Save metadata from DMD notification
@@ -222,18 +211,10 @@ def create_table_class_from_message(message_dict):
         meta_table.archive_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
         meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
         meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
-        if exposure_type in L2_SCIENCE_WIM_EXPOSURE_TYPES:
-            meta_table.exposure_type = WIM_EXPOSURE
-            meta_table.astrometry_status = -2 # These monitors should be run on WIM data
-            meta_table.source_catalog_status = -2
-        elif exposure_type in L2_SCIENCE_WSM_EXPOSURE_TYPES:
-            meta_table.exposure_type = WSM_EXPOSURE
-            meta_table.astrometry_status = -1 # These monitors should NOT be run on WSM data
-            meta_table.source_catalog_status = -1
-        elif exposure_type in L2_SCIENCE_FLAT_EXPOSURE_TYPES:
-            meta_table.exposure_type = FLAT_EXPOSURE
-            meta_table.astrometry_status = -1 # These monitors should NOT be run on FLAT data
-            meta_table.source_catalog_status = -1
+        exposure_config = L2_SCIENCE_EXPOSURE_CONFIG[exposure_type]
+        meta_table.exposure_type = exposure_config["exposure_type"]
+        for status_column, status_value in exposure_config["status_values"].items():
+            setattr(meta_table, status_column, int(status_value))
 
         # Save metadata from the filename
         obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L2_SCIENCE)

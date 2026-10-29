@@ -1,6 +1,7 @@
 import os
 from enum import StrEnum
 
+from .database import MonitorStatus
 from .dmd import ExposureTypes
 
 # AWS Parameter store path and parameter names
@@ -51,23 +52,57 @@ AWS_DBS = [
     DB_SECRET_NAME,
 ]
 
-# Valid exposure types for L2 science monitors
-L2_SCIENCE_WIM_EXPOSURE_TYPES = [
-    ExposureTypes.WFI_IMAGE,
-]
-L2_SCIENCE_WSM_EXPOSURE_TYPES = [
-    ExposureTypes.WFI_SPECTRAL,
-    ExposureTypes.WFI_GRISM,
-    ExposureTypes.WFI_PRISM,
-]
-L2_SCIENCE_FLAT_EXPOSURE_TYPES = [
-    ExposureTypes.WFI_FLAT,
-]
-
 # Define valid exposure type strings for within Spire itself
 WIM_EXPOSURE = "WIM"
 WSM_EXPOSURE = "WSM"
 FLAT_EXPOSURE = "FLAT"
+
+# Initial monitor status policy for each DMD L2 science exposure type.
+# Add future monitor ``*_status`` columns to each exposure's ``status_values``.
+L2_SCIENCE_EXPOSURE_CONFIG = {
+    ExposureTypes.WFI_IMAGE: {
+        "exposure_type": WIM_EXPOSURE,
+        "status_values": {
+            "astrometry_status": MonitorStatus.PENDING_CHECK,
+            "source_catalog_status": MonitorStatus.PENDING_CHECK,
+        },
+    },
+    ExposureTypes.WFI_SPECTRAL: {
+        "exposure_type": WSM_EXPOSURE,
+        "status_values": {
+            "astrometry_status": MonitorStatus.NOT_APPLICABLE,
+            "source_catalog_status": MonitorStatus.NOT_APPLICABLE,
+        },
+    },
+    ExposureTypes.WFI_FLAT: {
+        "exposure_type": FLAT_EXPOSURE,
+        "status_values": {
+            "astrometry_status": MonitorStatus.NOT_APPLICABLE,
+            "source_catalog_status": MonitorStatus.NOT_APPLICABLE,
+        },
+    },
+}
+
+#Currently we do not need to distinguish WFI_GRISM and WFI_PRISM from WFI_SPECTRAL in the exposure config.
+L2_SCIENCE_EXPOSURE_CONFIG[ExposureTypes.WFI_GRISM] = L2_SCIENCE_EXPOSURE_CONFIG[ExposureTypes.WFI_SPECTRAL].copy()
+L2_SCIENCE_EXPOSURE_CONFIG[ExposureTypes.WFI_PRISM] = L2_SCIENCE_EXPOSURE_CONFIG[ExposureTypes.WFI_SPECTRAL].copy()
+
+
+VALID_L2_SCIENCE_EXPOSURE_TYPES = tuple(L2_SCIENCE_EXPOSURE_CONFIG)
+
+# Retain the exposure group constants as derived views of the configuration.
+L2_SCIENCE_WIM_EXPOSURE_TYPES = [
+    exposure_type for exposure_type, config in L2_SCIENCE_EXPOSURE_CONFIG.items()
+    if config["exposure_type"] == WIM_EXPOSURE
+]
+L2_SCIENCE_WSM_EXPOSURE_TYPES = [
+    exposure_type for exposure_type, config in L2_SCIENCE_EXPOSURE_CONFIG.items()
+    if config["exposure_type"] == WSM_EXPOSURE
+]
+L2_SCIENCE_FLAT_EXPOSURE_TYPES = [
+    exposure_type for exposure_type, config in L2_SCIENCE_EXPOSURE_CONFIG.items()
+    if config["exposure_type"] == FLAT_EXPOSURE
+]
 
 
 class FunctionTypes(StrEnum):
@@ -94,10 +129,16 @@ class MessageKeys(StrEnum):
     REPORT_TYPE = 'report_type'
 
 # Monitor names for use within Spire itself. These are only then names of monitors triggered by lambda functions
-class MonitorNames(StrEnum):
+class MonitorGroupName(StrEnum):
     ESSENTIAL_WIM = "essential_wim"
     ESSENTIAL_WSM = "essential_wsm"
     ESSENTIAL_FLAT = "essential_flat"
     ESSENTIAL_GW = "essential_guide_window"
     ASTROMETRY = "astrometry"
     SOURCE_CATALOG = "source_catalog"
+
+ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE = {
+    WIM_EXPOSURE: MonitorGroupName.ESSENTIAL_WIM,
+    WSM_EXPOSURE: MonitorGroupName.ESSENTIAL_WSM,
+    FLAT_EXPOSURE: MonitorGroupName.ESSENTIAL_FLAT,
+}

@@ -14,6 +14,7 @@ from ..constants.database import (
     OPTICAL_ELEMENT_LENGTH,
     SOFTWARE_VERSION_LENGTH,
     VISIT_ID_LENGTH,
+    MonitorStatus,
 )
 from ..constants.dmd import FileTypes
 from ..constants.source_catalog_constants import (
@@ -63,11 +64,11 @@ class L2ScienceMetaTable(Base):
     # 0 indicates the monitor still needs to be run
     # -1 indicates the monitor should not be run
     # -2 indicates the monitor may need to be run depending on the metadata checks
-    essential_status:       Mapped[int] = mapped_column(Integer(), default=0) # populated by Spire
+    essential_status:       Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.NEEDS_TO_RUN)) # populated by Spire
     
     # periodic monitors are run on a schedule and may not be run for every file. The status is set to -1 if the monitor should not be run for this file.   
-    astrometry_status:      Mapped[int] = mapped_column(Integer(), default=-2) # populated by Spire
-    source_catalog_status:  Mapped[int] = mapped_column(Integer(), default=-2) # populated by Spire
+    astrometry_status:      Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.PENDING_CHECK)) # populated by Spire
+    source_catalog_status:  Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.PENDING_CHECK)) # populated by Spire
 
     def _get_verification_columns(self):
         return [
