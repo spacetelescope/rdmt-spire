@@ -104,6 +104,9 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
         return {'statusCode': StatusCodes.REPROCESS_NUM_DETERMINATION_FAIL,
             'body': [{'error_message': rep_num_err}]}
 
+    # We need to save the exposure type from the metadata table before we write the table and it gets detached
+    exposure_type = meta_table.exposure_type
+
     logger.info('Writing new row to metadata table.')
     write_new_metadata_table_rows(sql_engine, [meta_table])
 
@@ -123,16 +126,16 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             sqs_client=sqs_client
         )
         # Determine which essential monitor to use
-        if meta_table.exposure_type == WIM_EXPOSURE:
+        if exposure_type == WIM_EXPOSURE:
             essential_monitor_name = MonitorNames.ESSENTIAL_WIM
-        elif meta_table.exposure_type == WSM_EXPOSURE:
+        elif exposure_type == WSM_EXPOSURE:
             essential_monitor_name = MonitorNames.ESSENTIAL_WSM
-        elif meta_table.exposure_type == FLAT_EXPOSURE:
+        elif exposure_type == FLAT_EXPOSURE:
             essential_monitor_name = MonitorNames.ESSENTIAL_FLAT
         else:
-            logger.error(f"Unexpected exposure type: {meta_table.exposure_type}")
+            logger.error(f"Unexpected exposure type: {exposure_type}")
             return {'statusCode': StatusCodes.UNEXPECTED_EXPOSURE_TYPE,
-                    'body': [{'error_message': f'Unexpected exposure type for L2 Science File: {meta_table.exposure_type}'}]}
+                    'body': [{'error_message': f'Unexpected exposure type for L2 Science File: {exposure_type}'}]}
         logger.info(f'Running {essential_monitor_name} on L2 science file.')
         message_dict[MessageKeys.MONITOR_NAME] = essential_monitor_name
 
