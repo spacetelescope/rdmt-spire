@@ -77,6 +77,10 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
     """
     # Unpack the message attributes into a table class
     meta_table = create_table_class_from_message(message_dict)
+    if meta_table is None:
+        logger.error('Failed to create metadata table from message.')
+        return {'statusCode': StatusCodes.METADATA_TABLE_CREATION_FAIL,
+                'body': [{'error_message': f'Failed to create metadata table from message due to unexpected file type: {message_dict.get(MessageKeys.FILE_TYPE)}.'}]}
     meta_table.dmd_notify_datetime = notification_datetime
 
     # collect relevant parameters from AWS Parameter Store
@@ -248,6 +252,9 @@ def create_table_class_from_message(message_dict):
         meta_table.visit_id = obs_info['visit_id']
         meta_table.detector = obs_info['detector']
         meta_table.optical_element = obs_info['optical_element']
+    else:
+        logger.error(f"Unsupported file type: {message_dict[MessageKeys.FILE_TYPE]}")
+        return None
 
     return meta_table
 
