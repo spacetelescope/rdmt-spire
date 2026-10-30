@@ -145,11 +145,15 @@ class Noise1fMonitor(BaseMonitor):
         Is sigma-clipping still an okay result? The cutoff might vary (and also I'm not sure where that number came from too)
         """
         data = data2d.astype(float)
-        
-        # Sigma-clip to remove outliers
-        clipped = sigma_clip(data, sigma=sigma, masked=True)
+
+        # Handle non-finite pixels explicitly, then sigma-clip the rest
+        finite = np.isfinite(data)
+        clipped = sigma_clip(data[finite], sigma=sigma, masked=True)
         mean_val = clipped.mean()
-        data[clipped.mask] = mean_val
+
+        bad = ~finite
+        bad[finite] = clipped.mask
+        data[bad] = mean_val
 
         # Detrending the data
         time_series = self._put_in_time_series(data)
