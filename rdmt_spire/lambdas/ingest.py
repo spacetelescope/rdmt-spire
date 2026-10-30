@@ -106,10 +106,7 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             'body': [{'error_message': rep_num_err}]}
 
     # We need to save the exposure type from the metadata table before we write the table and it gets detached
-    if hasattr(meta_table, 'exposure_type'):
-        exposure_type = meta_table.exposure_type
-    else:
-        exposure_type = None
+    exposure_type = getattr(meta_table, 'exposure_type', None)
 
     logger.info('Writing new row to metadata table.')
     write_new_metadata_table_rows(sql_engine, [meta_table])
