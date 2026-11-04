@@ -155,17 +155,23 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
         )
         logger.info('Ingesting L1 guide window file.')
         message_dict[MessageKeys.MONITOR_NAME] = MonitorGroupName.ESSENTIAL_GW
+    
+    elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L4_SOURCE_CATALOG_L2:
+        message_sqs_url = None
+        logger.info('No monitor message will be sent for L4 source catalog L2 file.')
+    
     else:
         logger.error(f"Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
         return {'statusCode': StatusCodes.UNEXPECTED_FILE_TYPE,
                 'body': [{'error_message': f'Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.'}]}
 
     try:
-        response = sqs_client.send_message(
-            QueueUrl=message_sqs_url,
-            MessageBody=json.dumps(message_dict)
-        )
-        logger.info(f'Sent message. Response: {response}')
+        if message_sqs_url is not None:
+            response = sqs_client.send_message(
+                QueueUrl=message_sqs_url,
+                MessageBody=json.dumps(message_dict)
+            )
+            logger.info(f'Sent message. Response: {response}')
     except Exception as e:
         logger.error(f"Failed in sending message: {e}")
         return {'statusCode': StatusCodes.SQS_SEND_FAIL,
