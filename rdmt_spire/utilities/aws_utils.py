@@ -11,10 +11,10 @@ from botocore.exceptions import (
 
 def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_client=None) -> Dict[str, str]:
     """Fetch parameters from AWS Parameter Store at a given path.
-    
+
     Retrieves only the specified parameters using GetParameters in batches of
     at most ten names and returns them as a dictionary. Results are not cached.
-    
+
     Parameters
     ----------
     path : str
@@ -22,9 +22,9 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
     expected_parameters : list of str
         List of expected parameter names to fetch from the path.
     ssm_client : boto3.client, optional
-        An existing boto3 SSM client instance. Defaults to None, in which case 
+        An existing boto3 SSM client instance. Defaults to None, in which case
         a new client is created.
-    
+
     Returns
     -------
     dict
@@ -35,7 +35,16 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
         return params_dict
 
     if ssm_client is None:
+        logger.info("CONNECT DEBUG: creating ssm_client")
         ssm_client = boto3.client('ssm', region_name='us-east-1')
+        logger.info(f"CONNECT DEBUG: client retries {ssm_client.meta.config.retries}")
+        logger.info(f"CONNECT DEBUG: client connect_timeout {ssm_client.meta.config.connect_timeout}")
+        logger.info(f"CONNECT DEBUG: client read_timeout {ssm_client.meta.config.read_timeout}")
+    else:
+        logger.info("CONNECT DEBUG: existing ssm_client")
+        logger.info(f"CONNECT DEBUG: client retries {ssm_client.meta.config.retries}")
+        logger.info(f"CONNECT DEBUG: client connect_timeout {ssm_client.meta.config.connect_timeout}")
+        logger.info(f"CONNECT DEBUG: client read_timeout {ssm_client.meta.config.read_timeout}")
 
     # Map full names back to the caller's names, independent of response order.
     parameter_names = {
@@ -50,24 +59,24 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
         )
         for parameter in response['Parameters']:
             params_dict[parameter_names[parameter['Name']]] = parameter['Value']
-                
+
     missing_params = set(expected_parameters) - set(params_dict.keys())
     if missing_params:
         raise KeyError(f"Missing expected SSM parameters from path '{path}': {missing_params}")
-    
+
     return params_dict
 
 
 def load_s3_object(bucket_name:str, key_name:str):
     """Load an object (file) from an S3 bucket on AWS.
-    
+
     Parameters
     ----------
     bucket_name : str
         path to the bucket that is storing the S3 object
     key_name : str
         equivalent to the filename of the object in the S3 bucket for retrieval
-    
+
     Returns
     -------
     the contents of the file as a series of bytes
@@ -85,16 +94,16 @@ def load_s3_object(bucket_name:str, key_name:str):
 
 def make_sqs_message_attributes(msg_attrs:Dict[str,Any]) -> Dict[str,Any]:
     """Create a message attribute for an SQS message.
-    
+
     Parameters
     ----------
     msg_attrs : dict
         Collection of attributes to add to a message
-    
+
     Returns
     -------
     dictionary with the correct formatting to attach the desired attributes to the JSON SQS message.
-    
+
     """
     sqs_msg_attrs = {}
     for key, value in msg_attrs.items():
@@ -106,7 +115,7 @@ def make_sqs_message_attributes(msg_attrs:Dict[str,Any]) -> Dict[str,Any]:
             dtype="String"
         else:
             dtype="String"
-            
+
         sqs_msg_attrs[key] = {"DataType": dtype, "StringValue": str(value)}
 
     return sqs_msg_attrs
@@ -210,7 +219,7 @@ def get_sqs_url(queue_name, account_id=None, sqs_client=None):
         response = sts_client.get_caller_identity()
         account_id = response['Account']
         sts_client.close()
-    
+
     # Track whether we created the SQS client so we can close it later
     close_client = False
     if sqs_client is None:
@@ -222,7 +231,7 @@ def get_sqs_url(queue_name, account_id=None, sqs_client=None):
             QueueName=queue_name,
             QueueOwnerAWSAccountId=account_id
         )
-    
+
     # If we created the client in this function, close it to free resources
     if close_client:
         sqs_client.close()
@@ -236,7 +245,7 @@ def load_file_object(bucket_name: str, key_name: str, mode: str = "rb", config=N
     ----------
     bucket_name : str
         path to the S3 bucket (or local directory) that is storing the file
-        If the path starts with "s3://", it is treated as an S3 bucket; otherwise, 
+        If the path starts with "s3://", it is treated as an S3 bucket; otherwise,
         it is treated as a local directory.
     key_name : str
         equivalent to the filename of the object in the S3 bucket for retrieval
@@ -261,7 +270,7 @@ def load_file_object(bucket_name: str, key_name: str, mode: str = "rb", config=N
             with open(local_path, mode=mode) as fp:
                 content = io.BytesIO(fp.read())
         else:
-            raise FileNotFoundError(f"File not found in S3 bucket or local path: {local_path}")        
+            raise FileNotFoundError(f"File not found in S3 bucket or local path: {local_path}")
 
     return content
 
@@ -274,7 +283,7 @@ def file_exists(bucket_name: str, key_name: str, config=None):
     ----------
     bucket_name : str
         path to the S3 bucket (or local directory) that is storing the file.
-        If the path starts with "s3://", it is treated as an S3 bucket; otherwise, 
+        If the path starts with "s3://", it is treated as an S3 bucket; otherwise,
         it is treated as a local directory.
     key_name : str
         equivalent to the filename of the object in the S3 bucket for retrieval

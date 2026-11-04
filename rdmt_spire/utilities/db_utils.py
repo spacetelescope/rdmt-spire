@@ -37,7 +37,7 @@ def get_secrets(secret_name):
         A dictionary containing the secret values retrieved from AWS Secrets
         Manager. The structure of the returned dictionary depends on the
         contents of the stored secret.
-    
+
     """
     region_name = "us-east-1"
 
@@ -47,6 +47,9 @@ def get_secrets(secret_name):
         service_name='secretsmanager',
         region_name=region_name
     )
+    logger.info(f"CONNECT DEBUG: client retries {client.meta.config.retries}")
+    logger.info(f"CONNECT DEBUG: client connect_timeout {client.meta.config.connect_timeout}")
+    logger.info(f"CONNECT DEBUG: client read_timeout {client.meta.config.read_timeout}")
 
     try:
         get_secret_value_response = client.get_secret_value(
@@ -125,7 +128,7 @@ def get_engine_from_url(connection_url, recursive_depth=0):
         logger.error(f"ERROR: Unexpected error: Could not create SQLAlchemy engine for {connection_url.split('@')[-1]}.")
         logger.error(e)
         raise e # TODO: think about how to possibly handle this error better. Do we want to run Spire if no DB is available?
-    
+
     try:
         connection = engine.connect()
     except OperationalError as e:
@@ -145,7 +148,7 @@ def get_engine_from_url(connection_url, recursive_depth=0):
         if 'connection' in locals() and (not connection.closed):
             connection.close()
 
-    
+
     logger.info(f"SUCCESS: Connected to {connection_url.split('@')[-1]} using SQLAlchemy.")
     return engine
 
@@ -190,22 +193,22 @@ def connect_to_db(database_name, secret_name):
             if len(results_as_dict) == 0:
                 logger.warning(f"Database '{database_name}' does not exist. Creating database.")
                 connection.execute(text(f"CREATE DATABASE {database_name}"))
-                connection.commit() 
+                connection.commit()
         logger.info(f"Database '{database_name}' exists.")
 
-        # clean up the server engine 
+        # clean up the server engine
         server_engine.dispose()
 
         # reconnect to the database
         database_engine = get_engine_from_url(database_string)
-    
+
     return database_engine
 
 
 def download_migration_scripts_from_s3(s3_bucket, alembic_file_local_path, s3_client=None):
     """
     Downloads migration scripts from S3 to a local directory.
-    
+
     Parameters
     ----------
     s3_bucket : str
@@ -223,13 +226,13 @@ def download_migration_scripts_from_s3(s3_bucket, alembic_file_local_path, s3_cl
         alembic_file_local_path = Path(alembic_file_local_path)
     alembic_version_local_path = alembic_file_local_path / "versions"
     alembic_version_local_path.mkdir(parents=True, exist_ok=True)
-    
+
     # remove any existing version .py files
     pattern = str(alembic_version_local_path / "*.py")
-    
+
     # Use glob to get a list of all matching .py files
     py_files = glob.glob(pattern)
-    
+
     if py_files:
         logger.info(f"Found .py files in '{alembic_version_local_path}':")
         for file_path in py_files:
@@ -351,7 +354,7 @@ def run_alembic_downgrade(
     ----------
     alembic_ini_path : str
         Path to the alembic.ini configuration file.
-    script_location: 
+    script_location:
         Path to the Alembic migration script directory.
     revision_str : str
         SHA string unique to the revision to downgrade to.
@@ -393,5 +396,5 @@ def run_alembic_downgrade(
 
     else:
         logger.info("Skipping downgrade as allow_update = False.")
-    
+
     return versions_to_delete
