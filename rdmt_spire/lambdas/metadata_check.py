@@ -12,7 +12,6 @@ from ..constants.database import MonitorStatus
 from ..constants.lambdas import (
     ASTROMETRY_MONITOR_QUEUE,
     AWS_DBS,
-    AWS_MONITOR_QUEUES,
     AWS_PARAMETER_PATH,
     DB_NAME,
     DB_SECRET_NAME,
@@ -51,7 +50,10 @@ def metadata_check_function(message_dict, aws_account_id):
 
     """
 
-    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=AWS_MONITOR_QUEUES + AWS_DBS)
+    params = fetch_parameters_from_path(
+        AWS_PARAMETER_PATH,
+        expected_parameters=AWS_DBS + [ASTROMETRY_MONITOR_QUEUE, SOURCE_CATALOG_MONITOR_QUEUE],
+    )
 
     all_status_columns = [
         column.key for column in sa_inspect(L2ScienceMetaTable).columns if column.key.endswith("_status")

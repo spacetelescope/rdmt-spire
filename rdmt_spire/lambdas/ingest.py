@@ -10,7 +10,6 @@ from ..constants.codes import StatusCodes
 from ..constants.dmd import FileTypes, ReprocessingStates
 from ..constants.lambdas import (
     AWS_DBS,
-    AWS_MONITOR_QUEUES,
     AWS_PARAMETER_PATH,
     DB_NAME,
     DB_SECRET_NAME,
@@ -91,7 +90,12 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
     meta_table.dmd_notify_datetime = notification_datetime
 
     # collect relevant parameters from AWS Parameter Store
-    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=AWS_MONITOR_QUEUES + AWS_DBS)
+    expected_parameters = AWS_DBS.copy()
+    if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L2_SCIENCE:
+        expected_parameters.append(ESSENTIAL_L2_MONITOR_QUEUE)
+    elif message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
+        expected_parameters.append(GUIDE_WINDOW_MONITOR_QUEUE)
+    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=expected_parameters)
 
     # Connecting to the database
     logger.info('connecting to the database')
@@ -415,7 +419,7 @@ def ingest_batch(message_dicts, notification_datetimes):
 
     # Connecting to the database
     # collect relevant parameters from AWS Parameter Store
-    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=AWS_MONITOR_QUEUES + AWS_DBS)
+    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=AWS_DBS)
 
     # Connecting to the database
     logger.info('connecting to the database')
