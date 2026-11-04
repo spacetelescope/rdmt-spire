@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import boto3
 import numpy as np
+from botocore.config import Config
 from botocore.exceptions import (
     ClientError,
 )
@@ -39,7 +40,17 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
 
     if ssm_client is None:
         logger.info("CONNECT DEBUG: creating ssm_client")
-        ssm_client = boto3.client('ssm', region_name='us-east-1')
+
+        config = Config(
+            retries={
+                'mode': 'standard',
+                'total_max_attempts': 10
+            },
+            # connect_timeout=90,  # default 60
+            # read_timeout=90  # default 60
+        )
+
+        ssm_client = boto3.client('ssm', region_name='us-east-1', config=config)
         logger.info(f"CONNECT DEBUG: client retries {ssm_client.meta.config.retries}")
         logger.info(f"CONNECT DEBUG: client connect_timeout {ssm_client.meta.config.connect_timeout}")
         logger.info(f"CONNECT DEBUG: client read_timeout {ssm_client.meta.config.read_timeout}")
