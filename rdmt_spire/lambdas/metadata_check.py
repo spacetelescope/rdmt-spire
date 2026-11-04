@@ -143,6 +143,10 @@ def metadata_check_function(message_dict, aws_account_id):
                 rule_statements[col] = case(*rule, else_=getattr(L2ScienceMetaTable, col))
             else:
                 raise ValueError(f"Invalid rule format for {col}: {rule}. Must be a tuple or list of tuples.")
+
+        # TODO: Copilot had concerns that the above rule handling would overwrite rules for the same column if it appears in both selecting_rules and waiting_rules.
+        # in particular, the selecting rules else_ condition applies to every row in the update, not just ones that are pending.
+        # WCS is not sure this is happening but we should try to follow the logic more carefully to avoid unintended overwrites/updates.
             
         # Apply rule-based status updates to the pending rows.
         logger.info("Updating rows in the database based on selection rules ...")
