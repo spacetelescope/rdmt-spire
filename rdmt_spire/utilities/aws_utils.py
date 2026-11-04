@@ -8,6 +8,8 @@ from botocore.exceptions import (
     ClientError,
 )
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_client=None) -> Dict[str, str]:
     """Fetch parameters from AWS Parameter Store at a given path.
