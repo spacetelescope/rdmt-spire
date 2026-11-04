@@ -117,19 +117,30 @@ def metadata_check_function(message_dict, aws_account_id):
 
         logger.info("Defining selection rules for metadata checks ...")
         # Define selection rules for each monitor. Each rule is a list of tuples where each tuple contains a condition and the corresponding status value to set. The conditions are SQLAlchemy expressions that evaluate to True or False for each row. The status values are integers that indicate whether the monitor should run (0) or not (-1).
-        rules = {}
-        logger.info("Defining selection rule for astrometry ...")
+
+        logger.info("Defining rules for selecting specific files ...")
+        selecting_rules = {}
         # TODO: test once we have more data spread across time
         # rules['astrometry_status'] = time_based_rule(session, pk_rows, 'astrometry_status')
-        rules['astrometry_status'] = every_other_rule(pk_rows, 'astrometry_status')
-        rules['source_catalog_status'] = source_catalog_rule(pk_rows, 'source_catalog_status')
+        selecting_rules['astrometry_status'] = every_other_rule(pk_rows, 'astrometry_status')
+
+        logger.info("Defining rules for waiting for condition ...")
+        waiting_rules = {}
+        waiting_rules['source_catalog_status'] = source_catalog_rule(pk_rows, 'source_catalog_status')
 
         # Validate selection rules and build SQL CASE statements.
         logger.info("Validating selection rules and building sql statement ...")
         rule_statements = {}
-        for col, rule in rules.items():
+        # When selecting specific files, we want to fall back on NOT_APPLICABLE if no rule matches
+        for col, rule in selecting_rules.items():
             if isinstance(rule, list) and all(isinstance(r, tuple) and len(r) == 2 for r in rule):
                 rule_statements[col] = case(*rule, else_=int(MonitorStatus.NOT_APPLICABLE))
+            else:
+                raise ValueError(f"Invalid rule format for {col}: {rule}. Must be a tuple or list of tuples.")
+        # When waiting for a condition, we want to fall back on the current status if no rule matches
+        for col, rule in waiting_rules.items():
+            if isinstance(rule, list) and all(isinstance(r, tuple) and len(r) == 2 for r in rule):
+                rule_statements[col] = case(*rule, else_=getattr(L2ScienceMetaTable, col))
             else:
                 raise ValueError(f"Invalid rule format for {col}: {rule}. Must be a tuple or list of tuples.")
             
@@ -312,7 +323,7 @@ def source_catalog_rule(pk_rows, status_column):
         L2ScienceMetaTable.reprocess_number,
     ).in_(
         select(
-            L4SourceCatalogL2MetaTable.filename,
+            L4SourceCatalogL2MetaTable.filename_l2,
             L4SourceCatalogL2MetaTable.reprocess_number,
         )
     )
