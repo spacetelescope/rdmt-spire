@@ -60,6 +60,7 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
             Names=names[start:start + 10],
             WithDecryption=True,
         )
+        logger.info(f"CONNECT DEBUG: successful response retries {response['ResponseMetadata']['RetryAttempts']}")
         for parameter in response['Parameters']:
             params_dict[parameter_names[parameter['Name']]] = parameter['Value']
 
