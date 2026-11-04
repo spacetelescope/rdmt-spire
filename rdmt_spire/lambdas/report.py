@@ -151,7 +151,7 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
         conn.sql("ATTACH '' AS rdmt_db (TYPE mysql, SECRET 'db_secret');")
 
         # Switch to using rdmt_db server as default to allow SQLAlchemy to make SQL strings
-        conn.sql("CONNECT rdmt_db;") # Used to be USE
+        conn.sql("USE rdmt_db;")
 
         # Generate the report datetime and set the value for all columns to be reported (e.g. all rows where file reported date is not populated but all "_status" columns are -1 or 1 (indicating all monitors that needed to run have done so successfully))
         report_time = datetime.now().replace(microsecond=0)
@@ -204,9 +204,6 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
             """
             conn.execute(parquet_export_str, (report_time,))
             logger.info("Saved parquet file to dataset.")
-
-            conn.execute("DISCONNECT;") # to close the CONNECT added earlier
-            logger.info("Closed database connection.")
 
             logger.info("Generating report message string.")
             report_message = generate_report_message(
