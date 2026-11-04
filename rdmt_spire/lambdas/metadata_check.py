@@ -159,20 +159,30 @@ def metadata_check_function(message_dict, aws_account_id):
         logger.info("Querying database for rows that have been updated to *_status == 0 ...")
 
         # Fetch all rows that were just updated and have any of the metadata check status columns equal to 0 (selected).
-        updated_rows = session.execute(
-            select(L2ScienceMetaTable).where(
-                and_(
-                    tuple_(
-                        L2ScienceMetaTable.filename,
-                        L2ScienceMetaTable.reprocess_number,
-                    ).in_(pk_values),
-                    or_(*[getattr(L2ScienceMetaTable, col) == MonitorStatus.NEEDS_TO_RUN for col in metadata_check_status_columns])
-                )
+        stmt = select(L2ScienceMetaTable).where(
+            and_(
+                tuple_(
+                    L2ScienceMetaTable.filename,
+                    L2ScienceMetaTable.reprocess_number,
+                ).in_(pk_values),
+                or_(*[getattr(L2ScienceMetaTable, col) == MonitorStatus.NEEDS_TO_RUN for col in metadata_check_status_columns])
             )
-        ).scalars().all()
+        )
+
+        # for debugging
+        logger.info(f'SQL statement for fetching updated rows: {stmt}')
+
+        updated_rows = session.execute(stmt).scalars().all()
+
+        # for debugging
+        logger.info(f'Updated rows: {updated_rows}')
 
         # Create a dictionary to store L4 metadata rows keyed by their corresponding L2 primary key.
         source_catalog_rows = [row for row in updated_rows if row.source_catalog_status == MonitorStatus.NEEDS_TO_RUN]
+
+        # for debugging
+        logger.info(f'Source catalog rows: {source_catalog_rows}')
+
         l4_metadata_by_pk = {}
         if source_catalog_rows:
             source_catalog_pks = [
