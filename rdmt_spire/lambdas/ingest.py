@@ -75,6 +75,9 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             human-readable message (success or error detail).
 
     """
+    # For debugging
+    logger.info(f'Received message: {message_dict}')
+    
     # Ensure the received file has a valid suffix
     if not any(message_dict.get('filename', '').lower().endswith(suffix) for suffix in VALID_FILE_SUFFIXES):
         logger.info(f'File suffix is not yet valid: {message_dict.get("filename")}.')
