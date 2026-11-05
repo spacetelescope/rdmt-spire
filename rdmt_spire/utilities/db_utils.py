@@ -26,17 +26,21 @@ def _get_secrets_manager_client():
     global _secrets_manager_client
     if _secrets_manager_client is None:
         logger.info('CONNECT DEBUG: creating Secrets Manager client')
+        started = time.monotonic()
         _secrets_manager_client = boto3.client(
             'secretsmanager',
             region_name='us-east-1',
             config=BotoConfig(
                 defaults_mode='standard',
-                connect_timeout=3,
-                read_timeout=5,
-                retries={'mode': 'standard', 'total_max_attempts': 2}
+                # TODO: Configure the timeouts and retries based on real world experience
+                connect_timeout=30, # copilot recommended 3, default is 60
+                read_timeout=30, # copilot recommended 5, default is 60
+                retries={'mode': 'standard', 'total_max_attempts': 5}
             )
         )
-        logger.info('CONNECT DEBUG: Secrets Manager client created')
+        logger.info('CONNECT DEBUG: Secrets Manager client initialization took %.3f seconds',
+                time.monotonic() - started)
+    logger.info('CONNECT DEBUG: reusing existing Secrets Manager client')
     return _secrets_manager_client
 
 def get_secrets(secret_name):
@@ -61,43 +65,25 @@ def get_secrets(secret_name):
         contents of the stored secret.
 
     """
-    region_name = "us-east-1"
-    
-    config = Config(
-        retries={
-            'mode': 'standard',
-            'total_max_attempts': 10
-        },
-        # connect_timeout=90,  # default 60
-        # read_timeout=90  # default 60
-    )
-
     # Create a Secrets Manager client
-    logger.info(f"CONNECT DEBUG: creating session")
-    session = boto3.session.Session()
-    logger.info(f"CONNECT DEBUG: session created, creating client")
-    client = session.client(
-        service_name='secretsmanager',
-        region_name=region_name,
-        config=config
-    )
-    logger.info(f"CONNECT DEBUG: client created")
-    
-    #client = _get_secrets_manager_client()
-    logger.info(f"CONNECT DEBUG: client retries {client.meta.config.retries}")
-    logger.info(f"CONNECT DEBUG: client connect_timeout {client.meta.config.connect_timeout}")
-    logger.info(f"CONNECT DEBUG: client read_timeout {client.meta.config.read_timeout}")
+    client = _get_secrets_manager_client()
 
+    logger.info('CONNECT DEBUG: requesting secret from Secrets Manager')
+    started = time.monotonic()
     try:
-        logger.info('CONNECT DEBUG: requesting secret from Secrets Manager')
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
-        logger.info(f"CONNECT DEBUG: successful response retries {get_secret_value_response['ResponseMetadata']['RetryAttempts']}")
     except Exception as e:
-        # For a list of exceptions thrown, see
-        # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
-        raise e
+        logger.error('CONNECT DEBUG: Secrets Manager request failed after %.3f seconds (%s)',
+                     time.monotonic() - started, type(e).__name__)
+        raise
+    logger.info(
+        'CONNECT DEBUG: Secrets Manager request took %.3f seconds '
+        '(connection, response read, and retries combined); retries=%s',
+        time.monotonic() - started,
+        get_secret_value_response['ResponseMetadata']['RetryAttempts']
+    )
     database_secrets = json.loads(get_secret_value_response['SecretString'])
 
     return database_secrets
