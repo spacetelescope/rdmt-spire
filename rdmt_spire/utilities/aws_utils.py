@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import time
 from typing import Any, Dict, List
 
 import boto3
@@ -12,6 +13,33 @@ from botocore.exceptions import (
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+_ssm_client = None
+
+
+def _get_ssm_client():
+    """Create the SSM client on first use and reuse it across warm invocations."""
+    global _ssm_client
+    if _ssm_client is None:
+        logger.info("CONNECT DEBUG: creating SSM client")
+        started = time.monotonic()
+        _ssm_client = boto3.client(
+            "ssm",
+            region_name="us-east-1",
+            config=Config(
+                defaults_mode="standard",
+                connect_timeout=30,
+                read_timeout=30,
+                retries={"mode": "standard", "total_max_attempts": 5},
+            ),
+        )
+        logger.info(
+            "CONNECT DEBUG: SSM client initialization took %.3f seconds",
+            time.monotonic() - started,
+        )
+    logger.info("CONNECT DEBUG: reusing existing SSM client")
+    return _ssm_client
+
 
 def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_client=None) -> Dict[str, str]:
     """Fetch parameters from AWS Parameter Store at a given path.
@@ -27,7 +55,7 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
         List of expected parameter names to fetch from the path.
     ssm_client : boto3.client, optional
         An existing boto3 SSM client instance. Defaults to None, in which case
-        a new client is created.
+        a module-level client is created on first use and reused.
 
     Returns
     -------
@@ -39,26 +67,9 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
         return params_dict
 
     if ssm_client is None:
-        logger.info("CONNECT DEBUG: creating ssm_client")
-
-        config = Config(
-            retries={
-                'mode': 'standard',
-                'total_max_attempts': 10
-            },
-            # connect_timeout=90,  # default 60
-            # read_timeout=90  # default 60
-        )
-
-        ssm_client = boto3.client('ssm', region_name='us-east-1', config=config)
-        logger.info(f"CONNECT DEBUG: client retries {ssm_client.meta.config.retries}")
-        logger.info(f"CONNECT DEBUG: client connect_timeout {ssm_client.meta.config.connect_timeout}")
-        logger.info(f"CONNECT DEBUG: client read_timeout {ssm_client.meta.config.read_timeout}")
+        ssm_client = _get_ssm_client()
     else:
-        logger.info("CONNECT DEBUG: existing ssm_client")
-        logger.info(f"CONNECT DEBUG: client retries {ssm_client.meta.config.retries}")
-        logger.info(f"CONNECT DEBUG: client connect_timeout {ssm_client.meta.config.connect_timeout}")
-        logger.info(f"CONNECT DEBUG: client read_timeout {ssm_client.meta.config.read_timeout}")
+        logger.info("CONNECT DEBUG: using supplied SSM client")
 
     # Map full names back to the caller's names, independent of response order.
     parameter_names = {
@@ -67,11 +78,27 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
     names = list(parameter_names)
     # get_parameters can only return 10 names at a time
     for start in range(0, len(names), 10):
-        response = ssm_client.get_parameters(
-            Names=names[start:start + 10],
-            WithDecryption=True,
+        logger.info("CONNECT DEBUG: requesting SSM parameters (batch %s)", start // 10 + 1)
+        started = time.monotonic()
+        try:
+            response = ssm_client.get_parameters(
+                Names=names[start:start + 10],
+                WithDecryption=True,
+            )
+        except Exception as e:
+            logger.error(
+                "CONNECT DEBUG: SSM request failed after %.3f seconds (%s)",
+                time.monotonic() - started,
+                type(e).__name__,
+            )
+            raise
+        response_metadata = response.get("ResponseMetadata") or {}
+        logger.info(
+            "CONNECT DEBUG: SSM request took %.3f seconds "
+            "(connection, response read, and retries combined); retries=%s",
+            time.monotonic() - started,
+            response_metadata.get("RetryAttempts", "unknown"),
         )
-        logger.info(f"CONNECT DEBUG: successful response retries {response['ResponseMetadata']['RetryAttempts']}")
         for parameter in response['Parameters']:
             params_dict[parameter_names[parameter['Name']]] = parameter['Value']
 
