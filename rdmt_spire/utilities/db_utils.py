@@ -25,7 +25,6 @@ def _get_secrets_manager_client():
     """Create the client on first use and reuse it in warm Lambda invocations."""
     global _secrets_manager_client
     if _secrets_manager_client is None:
-        logger.info('CONNECT DEBUG: creating Secrets Manager client')
         started = time.monotonic()
         _secrets_manager_client = boto3.client(
             'secretsmanager',
@@ -40,7 +39,6 @@ def _get_secrets_manager_client():
         )
         logger.info('CONNECT DEBUG: Secrets Manager client initialization took %.3f seconds',
                 time.monotonic() - started)
-    logger.info('CONNECT DEBUG: reusing existing Secrets Manager client')
     return _secrets_manager_client
 
 def get_secrets(secret_name):
@@ -67,8 +65,6 @@ def get_secrets(secret_name):
     """
     # Create a Secrets Manager client
     client = _get_secrets_manager_client()
-
-    logger.info('CONNECT DEBUG: requesting secret from Secrets Manager')
     started = time.monotonic()
     try:
         get_secret_value_response = client.get_secret_value(

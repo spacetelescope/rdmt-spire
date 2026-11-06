@@ -21,7 +21,6 @@ def _get_ssm_client():
     """Create the SSM client on first use and reuse it across warm invocations."""
     global _ssm_client
     if _ssm_client is None:
-        logger.info("CONNECT DEBUG: creating SSM client")
         started = time.monotonic()
         _ssm_client = boto3.client(
             "ssm",
@@ -37,7 +36,6 @@ def _get_ssm_client():
             "CONNECT DEBUG: SSM client initialization took %.3f seconds",
             time.monotonic() - started,
         )
-    logger.info("CONNECT DEBUG: reusing existing SSM client")
     return _ssm_client
 
 
@@ -68,8 +66,6 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
 
     if ssm_client is None:
         ssm_client = _get_ssm_client()
-    else:
-        logger.info("CONNECT DEBUG: using supplied SSM client")
 
     # Map full names back to the caller's names, independent of response order.
     parameter_names = {
@@ -78,7 +74,6 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
     names = list(parameter_names)
     # get_parameters can only return 10 names at a time
     for start in range(0, len(names), 10):
-        logger.info("CONNECT DEBUG: requesting SSM parameters (batch %s)", start // 10 + 1)
         started = time.monotonic()
         try:
             response = ssm_client.get_parameters(
