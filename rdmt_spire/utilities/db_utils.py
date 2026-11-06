@@ -37,8 +37,11 @@ def _get_secrets_manager_client():
                 retries={'mode': 'standard', 'total_max_attempts': 5}
             )
         )
-        logger.info('CONNECT DEBUG: Secrets Manager client initialization took %.3f seconds',
-                time.monotonic() - started)
+        # TODO: Keep track of long client initialization, if this doesn't happen often, we could remove this check
+        expected_init_time = 1
+        client_init_time = time.monotonic() - started
+        if client_init_time > expected_init_time:
+            logger.warning(f'Secrets Manager client initialization took longer than expected: {client_init_time:.3f} seconds > {expected_init_time:.3f} seconds')
     return _secrets_manager_client
 
 def get_secrets(secret_name):
@@ -71,15 +74,17 @@ def get_secrets(secret_name):
             SecretId=secret_name
         )
     except Exception as e:
-        logger.error('CONNECT DEBUG: Secrets Manager request failed after %.3f seconds (%s)',
+        logger.error('Secrets Manager request failed after %.3f seconds (%s)',
                      time.monotonic() - started, type(e).__name__)
-        raise
-    logger.info(
-        'CONNECT DEBUG: Secrets Manager request took %.3f seconds '
-        '(connection, response read, and retries combined); retries=%s',
-        time.monotonic() - started,
-        get_secret_value_response['ResponseMetadata']['RetryAttempts']
-    )
+        raise # raise the original exception
+
+    # TODO: if we don't see this triggered in the logs, we can reduce the connect_timeout and read_timeout 
+    # parameters in the cached client
+    expected_request_time = 1
+    request_time = time.monotonic() - started
+    if request_time > expected_request_time:
+        logger.warning(f'Secrets Manager request took longer than expected: {request_time:.3f} seconds > {expected_request_time:.3f} seconds')
+
     database_secrets = json.loads(get_secret_value_response['SecretString'])
 
     return database_secrets

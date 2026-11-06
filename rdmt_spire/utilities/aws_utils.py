@@ -32,10 +32,10 @@ def _get_ssm_client():
                 retries={"mode": "standard", "total_max_attempts": 5},
             ),
         )
-        logger.info(
-            "CONNECT DEBUG: SSM client initialization took %.3f seconds",
-            time.monotonic() - started,
-        )
+        expected_initialization_time = 1  # seconds, adjust as needed for your environment
+        initialization_time = time.monotonic() - started
+        if initialization_time > expected_initialization_time:
+            logger.warning(f"SSM client initialization took longer than expected: {initialization_time:.3f} seconds > {expected_initialization_time:.3f} seconds")
     return _ssm_client
 
 
@@ -72,6 +72,7 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
         f"{path.rstrip('/')}/{name}": name for name in expected_parameters
     }
     names = list(parameter_names)
+    expected_request_time = 1  # seconds, adjust as needed for your environment
     # get_parameters can only return 10 names at a time
     for start in range(0, len(names), 10):
         started = time.monotonic()
@@ -82,18 +83,17 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
             )
         except Exception as e:
             logger.error(
-                "CONNECT DEBUG: SSM request failed after %.3f seconds (%s)",
+                "SSM request failed after %.3f seconds (%s)",
                 time.monotonic() - started,
                 type(e).__name__,
             )
-            raise
+            raise # raise the original exception
+        
         response_metadata = response.get("ResponseMetadata") or {}
-        logger.info(
-            "CONNECT DEBUG: SSM request took %.3f seconds "
-            "(connection, response read, and retries combined); retries=%s",
-            time.monotonic() - started,
-            response_metadata.get("RetryAttempts", "unknown"),
-        )
+        request_time = time.monotonic() - started
+        if request_time > expected_request_time:
+            logger.warning(f"SSM request took longer than expected: {request_time:.3f} seconds > {expected_request_time:.3f} seconds; retries={response_metadata.get('RetryAttempts', 'unknown')}")
+
         for parameter in response['Parameters']:
             params_dict[parameter_names[parameter['Name']]] = parameter['Value']
 
