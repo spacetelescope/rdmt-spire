@@ -38,10 +38,10 @@ def _get_secrets_manager_client():
             )
         )
         # TODO: Keep track of long client initialization, if this doesn't happen often, we could remove this check
-        expected_init_time = 1
-        client_init_time = time.monotonic() - started
-        if client_init_time > expected_init_time:
-            logger.warning(f'Secrets Manager client initialization took longer than expected: {client_init_time:.3f} seconds > {expected_init_time:.3f} seconds')
+        expected_initialization_time = 1
+        client_initialization_time = time.monotonic() - started
+        if client_initialization_time > expected_initialization_time:
+            logger.warning(f'Secrets Manager client initialization took longer than expected: {client_initialization_time:.3f} seconds > {expected_initialization_time:.3f} seconds')
     return _secrets_manager_client
 
 def get_secrets(secret_name):
