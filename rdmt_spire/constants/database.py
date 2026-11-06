@@ -11,6 +11,7 @@ SOFTWARE_VERSION_LENGTH = 120
 ARCHIVE_LENGTH = 120
 DATA_RELEASE_ID_LENGTH = 16
 EXPOSURE_TYPE_LENGTH = 16 # This has plenty of buffer for future exposure types
+FILE_CHECKSUM_LENGTH = 32 
 
 class MonitorStatus(IntEnum):
     """Integer values stored in monitor ``*_status`` columns."""
