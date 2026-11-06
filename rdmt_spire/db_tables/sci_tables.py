@@ -9,6 +9,7 @@ from ..constants.database import (
     DATA_RELEASE_ID_LENGTH,
     DETECTOR_LENGTH,
     EXPOSURE_TYPE_LENGTH,
+    FILE_CHECKSUM_LENGTH,
     FILENAME_LENGTH,
     OBSERVATION_ID_LENGTH,
     OPTICAL_ELEMENT_LENGTH,
@@ -36,6 +37,7 @@ class L4SourceCatalogL2MetaTable(Base):
     # +1 for each reprocessing (reprocessingState = 'reprocessed' or 'data_release')
     archive_bucket:         Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveBucket']
     archive_key:            Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveObjectKey']
+    file_checksum:          Mapped[Optional[str]] = mapped_column(String(FILE_CHECKSUM_LENGTH)) # from body['checksum']
 
     def _get_verification_columns(self):
         return [
@@ -74,6 +76,7 @@ class L2ScienceMetaTable(Base):
     file_created_datetime:  Mapped[datetime] = mapped_column(DateTime()) # from body['fileCreationTimestamp']
     dmd_notify_datetime:    Mapped[datetime] = mapped_column(DateTime()) # from outer message structure
     data_release_id:        Mapped[Optional[str]] = mapped_column(String(DATA_RELEASE_ID_LENGTH))
+    file_checksum:          Mapped[Optional[str]] = mapped_column(String(FILE_CHECKSUM_LENGTH)) # from body['checksum']
 
     # Information that requires opening the file to extract
     observation_id:         Mapped[Optional[str]] = mapped_column(String(OBSERVATION_ID_LENGTH)) # from meta.observation.observation_id
