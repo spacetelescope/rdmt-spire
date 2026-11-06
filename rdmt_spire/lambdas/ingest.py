@@ -75,6 +75,16 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
             human-readable message (success or error detail).
 
     """
+    filename = message_dict.get('filename', '-')
+    safe_filename = filename.replace("%", "%%")
+
+    # update logging prefix
+    global logger
+    formatter = logging.Formatter(f"[%(levelname)s] %(asctime)s.%(msecs)03dZ %(aws_request_id).8s {safe_filename}: %(message)s\n", "%Y-%m-%dT%H:%M:%S")
+    
+    for handler in logger.handlers:
+        handler.setFormatter(formatter)
+
     # For debugging
     logger.info(f'Received message: {message_dict}')
     
