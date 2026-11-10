@@ -343,7 +343,7 @@ def get_previous_file_reprocess_numbers(engine, meta_tables):
 
     return reprocess_nums_list
 
-def determine_reprocessing_number(message_dict, previous_reprocess_nums):
+def determine_reprocessing_number(message_dict, previous_reprocess_nums, previous_checksums):
     """
     Determine the next reprocessing number and any consistency error.
 
@@ -361,6 +361,8 @@ def determine_reprocessing_number(message_dict, previous_reprocess_nums):
     previous_reprocess_nums : Sequence[int]
         A (possibly empty) sequence of previously assigned reprocessing numbers
         for the file. Typically a list of integers.
+    previous_checksums : Sequence[str]
+        A (possibly empty) sequence of previously recorded checksums for the file. Typically a list of strings.
 
     Returns
     -------
@@ -369,29 +371,41 @@ def determine_reprocessing_number(message_dict, previous_reprocess_nums):
         state or when no increment applies. If an inconsistency is detected,
         this will be the best-effort computed value (often ``0``) and
         the error will be described in ``rep_num_err``.
-    rep_num_err : Optional[str]
-        ``None`` if no inconsistency is found; otherwise, a human-readable error
-        message describing the mismatch between the message state and the
-        metadata (e.g., file not in metadata but state indicates a reprocessed/release).
+    rep_num_action : str
+        ``'run'`` if no inconsistency is found; otherwise, a string indicating the action to take:
+        - ``'skip'``: File should be skipped (e.g., same checksum as last recorded).
+        - ``'rerun'``: File should be rerun (e.g., L1 guide window with PROMPT state).
+        - ``'error'``: An error occurred (e.g., state mismatch with metadata).
 
     """
-    rep_num_err = None
+    rep_num_action = 'run'
     reprocess_num = 0
-    if message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.PROMPT:
+    # If file exists with the same checksum as the last recorded checksum, don't monitor again.
+    if message_dict[MessageKeys.CHECKSUM] == previous_checksums[-1]:
+        logger.warning(f'File is already in metadata table with the same file checksum. Not rerunning. Reprocessing state: {message_dict[MessageKeys.REPROCESSING_STATE]}')
+        rep_num_action = 'skip'
+    elif message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.PROMPT:
         if len(previous_reprocess_nums) > 0:
-            rep_num_err = f'File is already in metadata table, but notification has reprocessingState={ReprocessingStates.PROMPT}.'
+            if message_dict[MessageKeys.FILE_TYPE] == FileTypes.L1_GUIDE_WINDOW:
+                logger.warning(f'File is already in metadata table, but notification has reprocessingState={ReprocessingStates.PROMPT} for a L1 guide window file. Running second version.')
+                rep_num_action = 'rerun'
+            else:
+                logger.error(f'File is already in metadata table, but notification has reprocessingState={ReprocessingStates.PROMPT}.')
+                rep_num_action = 'error'
     elif message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.REPROCESSED:
         if len(previous_reprocess_nums) > 0:
             reprocess_num = 1 + max(previous_reprocess_nums)
         else:
-            rep_num_err = f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.REPROCESSED}.'
+            logger.error(f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.REPROCESSED}.')
+            rep_num_action = 'error'
     elif message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.DATA_RELEASE:
         if len(previous_reprocess_nums) > 0:
             reprocess_num = 1 + max(previous_reprocess_nums)
         else:
-            rep_num_err = f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.DATA_RELEASE}.'
+            logger.error(f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.DATA_RELEASE}.')
+            rep_num_action = 'error'
 
-    return reprocess_num, rep_num_err
+    return reprocess_num, rep_num_action
 
 def write_new_metadata_table_rows(engine, rows_to_add):
     """
