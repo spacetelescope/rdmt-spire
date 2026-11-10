@@ -301,6 +301,7 @@ def load_file_object(bucket_name: str, key_name: str, mode: str = "rb", config=N
     """
     if bucket_name.startswith("s3://"):
         content = load_s3_object(bucket_name[len("s3://"):], key_name, config=config)
+        logger.info("Loaded S3 object")
     else:
         local_path = os.path.join(bucket_name, key_name)
         if os.path.exists(local_path):
@@ -344,4 +345,3 @@ def file_exists(bucket_name: str, key_name: str, config=None):
                 raise e
     else:
         return os.path.exists(os.path.join(bucket_name, key_name))
-
