@@ -97,11 +97,20 @@ class SourceCatalogMonitor(BaseMonitor):
         f_thermal = get_val(thermal_bkg, 'rate', optical_filter)
         f_min_zodi = get_val(zodiacal_light, 'rate', optical_filter)
 
+        if self.config.get("RDMT_SPIRE_L4_OBJECT_KEY", "") == "":
+            l4_object_key = filename.replace('_cal.asdf', '_cat.parquet')
+        else:
+            l4_object_key = self.config["RDMT_SPIRE_L4_OBJECT_KEY"]
+
 
         # 4. Construct parquet catalog file path and load it
-        file_object = aws_utils.load_file_object(self.config["RDMT_SPIRE_L4_DIR"], filename.replace('_cal.asdf', '_cat.parquet'))
-        df = pd.read_parquet(file_object)
-        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(df)}")
+        file_object = aws_utils.load_file_object(self.config["RDMT_SPIRE_L4_DIR"], l4_object_key)
+        logger.info(f"SourceCatalogMonitor: Reading {self.config['RDMT_SPIRE_L4_DIR']} {l4_object_key}")
+        catalog_table = Table.read(file_object, format="parquet")
+        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(catalog_table)}")
+        df = catalog_table.to_pandas()
+        df1=pd.read_parquet(file_object)
+        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(df)}, {len(df1)}")
 
         # 5. Point source selection
         if 'is_extended' not in df.columns:
