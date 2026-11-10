@@ -104,7 +104,7 @@ def fetch_parameters_from_path(path: str, expected_parameters: List[str], ssm_cl
     return params_dict
 
 
-def load_s3_object(bucket_name:str, key_name:str):
+def load_s3_object(bucket_name:str, key_name:str, config:dict[str,str]|None=None):
     """Load an object (file) from an S3 bucket on AWS.
 
     Parameters
@@ -113,13 +113,15 @@ def load_s3_object(bucket_name:str, key_name:str):
         path to the bucket that is storing the S3 object
     key_name : str
         equivalent to the filename of the object in the S3 bucket for retrieval
+    config : dict[str,str] | None, optional
+        Configuration for the boto3 client. Defaults to None.
 
     Returns
     -------
     the contents of the file as a series of bytes
 
     """
-    s3_client = boto3.client('s3')
+    s3_client = boto3.client('s3', config=config) if config else boto3.client('s3')
     logger.info(f"Loading S3 object from bucket {bucket_name}, key {key_name}")
     response = s3_client.get_object(
         Bucket=bucket_name,
