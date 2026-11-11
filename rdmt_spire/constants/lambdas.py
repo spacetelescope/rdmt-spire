@@ -123,6 +123,7 @@ class MessageKeys(StrEnum):
     FILENAME = "filename"
     REPROCESSING_STATE = "reprocessingState"
     EXPOSURE_TYPE = "exposureType"
+    CHECKSUM = "checksum"
 
     # The following keys are only used within Spire itself
     FUNCTION_TYPE = "function_type"
