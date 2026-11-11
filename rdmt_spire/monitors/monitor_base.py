@@ -9,7 +9,7 @@ import numpy as np
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO)
 
 @dataclass
 class DataCard:
