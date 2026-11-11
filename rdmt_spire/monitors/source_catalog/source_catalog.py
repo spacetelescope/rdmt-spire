@@ -35,7 +35,6 @@ class SourceCatalogMonitor(BaseMonitor):
         super().__init__(asdf_file)
         self.monitor_name = "source_catalog"
         self.config = config
-        logger.info(f"{self.monitor_name}: initialized")
         # Define properties and statistics for the metrics
         self.properties = SOURCE_CATALOG_PROPERTIES.copy()
         self.statistics = SOURCE_CATALOG_STATISTICS.copy()
@@ -104,13 +103,11 @@ class SourceCatalogMonitor(BaseMonitor):
 
 
         # 4. Construct parquet catalog file path and load it
-        file_object = aws_utils.load_file_object(self.config["RDMT_SPIRE_L4_DIR"], l4_object_key)
         logger.info(f"SourceCatalogMonitor: Reading {self.config['RDMT_SPIRE_L4_DIR']} {l4_object_key}")
-        catalog_table = Table.read(file_object, format="parquet")
-        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(catalog_table)}")
-        df = catalog_table.to_pandas()
-        df1=pd.read_parquet(file_object)
-        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(df)}, {len(df1)}")
+        file_object = aws_utils.load_file_object(self.config["RDMT_SPIRE_L4_DIR"], l4_object_key)
+        logger.info("SourceCatalogMonitor: Loading source catalog from parquet file")
+        df = pd.read_parquet(file_object)
+        logger.info(f"SourceCatalogMonitor: Loaded source catalog for file of length {len(df)}")
 
         # 5. Point source selection
         if 'is_extended' not in df.columns:
@@ -150,7 +147,7 @@ class SourceCatalogMonitor(BaseMonitor):
 
         m_mid = (m_sat + m_faint) / 2.0
 
-        logger.info(f"SourceCatalogMonitor: m_sat: {m_sat:.4f}, m_mid: {m_mid:.4f}, m_faint: {m_faint:.4f}")
+        logger.info(f"SourceCatalogMonitor: Magnitudes - m_sat: {m_sat:.4f}, m_mid: {m_mid:.4f}, m_faint: {m_faint:.4f}")
 
         # 7. Subdivide sources
         mab = -2.5 * np.log10(df_pts['psf_flux']) + 31.4
@@ -212,8 +209,6 @@ class SourceCatalogMonitor(BaseMonitor):
                 std_val = float(np.std(vals))
                 percentile_vals = np.percentile(vals, [2.275, 15.86, 50, 84.14, 97.725])
 
-            logger.info(f"NAN DEBUG: Appending property: {prop}, Mean: {mean_val}, Std: {std_val}, n_sources: {len(vals)}")
-
             self.append_data(f"{prop}_n_sources", len(vals), "")
             self.append_data(f"{prop}_median", percentile_vals[2], "")
             self.append_data(f"{prop}_dispersion_p68", (percentile_vals[3]-percentile_vals[1])/2.0, "")
@@ -258,7 +253,7 @@ class SourceCatalogMonitor(BaseMonitor):
 
         optical_filter = self.asdf_file["roman"]["meta"]["instrument"]["optical_element"].strip().lower()
 
-
+        logger.info("SourceCatalogMonitor: Starting evaluation of metrics")
         for property in self.properties:
             # First we evaluate the basic validity of each metric and set evalutation status to 
             # False if it is not valid and True if it is valid
