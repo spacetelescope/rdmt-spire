@@ -122,7 +122,6 @@ def load_s3_object(bucket_name:str, key_name:str, config:dict[str,str]|None=None
 
     """
     s3_client = boto3.client('s3', config=config) if config else boto3.client('s3')
-    logger.info(f"Loading S3 object from bucket {bucket_name}, key {key_name}")
     response = s3_client.get_object(
         Bucket=bucket_name,
         Key=key_name
@@ -304,11 +303,11 @@ def load_file_object(bucket_name: str, key_name: str, mode: str = "rb", config=N
 
     """
     if bucket_name.startswith("s3://"):
-        logger.info(f"Loadinf S3 object from bucket {bucket_name[len('s3://'):]}, key {key_name}")
+        logger.info(f"Loading object from bucket {bucket_name[len('s3://'):]}, key {key_name}")
         content = load_s3_object(bucket_name[len("s3://"):], key_name, config=config)
-        logger.info("Loaded S3 object")
     else:
         local_path = os.path.join(bucket_name, key_name)
+        logger.info(f"Loading object from path {local_path}")
         if os.path.exists(local_path):
             with open(local_path, mode=mode) as fp:
                 content = io.BytesIO(fp.read())

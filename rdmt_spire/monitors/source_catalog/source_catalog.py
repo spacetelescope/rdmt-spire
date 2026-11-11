@@ -209,6 +209,7 @@ class SourceCatalogMonitor(BaseMonitor):
                 std_val = float(np.std(vals))
                 percentile_vals = np.percentile(vals, [2.275, 15.86, 50, 84.14, 97.725])
 
+            logger.info(f"SourceCatalogMonitor: Appending property: {prop}, n_sources: {len(vals)}")
             self.append_data(f"{prop}_n_sources", len(vals), "")
             self.append_data(f"{prop}_median", percentile_vals[2], "")
             self.append_data(f"{prop}_dispersion_p68", (percentile_vals[3]-percentile_vals[1])/2.0, "")
