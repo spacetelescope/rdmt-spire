@@ -30,10 +30,10 @@ class MonitorManager:
         self.asdf_file: asdf.AsdfFile | None = None
         self.monitor_objects: list[Any] = []
 
-        if not isinstance(input_file, str):
-            logger.info(f"MonitorManager: initialized with input file: {input_file.uri}")
+        if isinstance(input_file, str):
+            logger.info(f"MonitorManager: initialized with input file string: {input_file}")
         else:
-            logger.info(f"MonitorManager: initialized with input file: {input_file}")
+            logger.info(f"MonitorManager: initialized with input file object: {input_file}")
 
         try:
             # Extracting the asdf file tree
@@ -45,12 +45,13 @@ class MonitorManager:
 
             else:
                 self.statusCode = StatusCodes.FAILURE
-                self.errors.append(f"MonitorManager: Invalid ASDF input {input_file}")
-                return
+                logger.error(f"MonitorManager: Invalid input file {input_file}")
+                raise ValueError(f"Invalid input file {input_file}")
 
-        except asdf.AsdfFileError as e:
+        except Exception as e:
             self.statusCode = StatusCodes.FAILURE
-            self.errors.append(f"MonitorManager: failed to open ASDF file: {e}")
+            logger.error(f"MonitorManager: failed to open input file: {e}")
+            raise
 
         if monitor_name == MonitorGroupName.ESSENTIAL_WIM:
             monitor_noise_1f = import_module("rdmt_spire.monitors.noise_1f")
@@ -92,14 +93,15 @@ class MonitorManager:
             )
 
         elif monitor_name == MonitorGroupName.SOURCE_CATALOG:
-            if monitor_config is None or "source_catalog" not in monitor_config or "RDMT_SPIRE_L4_DIR" not in monitor_config["source_catalog"]:
-                logger.error("MonitorManager: Missing 'RDMT_SPIRE_L4_DIR' in monitor_config for source_catalog monitor.")
-                self.statusCode = StatusCodes.FAILURE
-                self.errors.append("MonitorManager: Missing 'RDMT_SPIRE_L4_DIR' in monitor_config for source_catalog monitor.")
-                return
+            required_config_dirs = ["L4_ARCHIVE_DIR", "BUNDLED_DATA_DIR"]
+            source_catalog_config = (monitor_config or {}).get("source_catalog", [])
+            if not set(required_config_dirs).issubset(source_catalog_config):
+                logger.error("MonitorManager: Missing required config_dirs in monitor_config for source_catalog monitor.")
+                raise RuntimeError("MonitorManager: Missing required config_dirs in monitor_config for source_catalog monitor.")
+            
             monitor_source_catalog = import_module("rdmt_spire.monitors.source_catalog")
             self.monitor_objects.append(
-                monitor_source_catalog.SourceCatalogMonitor(self.asdf_file, monitor_config["source_catalog"]))
+                monitor_source_catalog.SourceCatalogMonitor(self.asdf_file, source_catalog_config))
 
         elif monitor_name == 'noise_1f':
             monitor_noise_1f = import_module("rdmt_spire.monitors.noise_1f")
@@ -113,7 +115,18 @@ class MonitorManager:
                 monitor_pixel.PixelMonitor(self.asdf_file)
             )
 
-        elif monitor_name == 'base_monitor':
+        elif monitor_name == "photoastro": #TODO: CHECK IMPLEMENTATION!
+            required_config_dirs=["BUNDLED_DATA_DIR", "REFERENCE_DATA_DIR", "L4_ARCHIVE_DIR"]
+            photoastro_config = (monitor_config or {}).get("photoastro", [])
+            if not set(required_config_dirs).issubset(photoastro_config):
+                logger.error("MonitorManager: Missing required config_dirs in monitor_config for photoastro monitor.")
+                raise RuntimeError("MonitorManager: Missing required config_dirs in monitor_config for photoastro monitor.")
+            
+            monitor_photoastro = import_module("rdmt_spire.monitors.photoastro")
+            self.monitor_objects.append(
+                monitor_photoastro.PhotoAstroMonitor(self.asdf_file, photoastro_config))
+
+        elif monitor_name == "base_monitor":
             self.monitor_objects.append(
                 BaseMonitor(self.asdf_file)
             )

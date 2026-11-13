@@ -2,14 +2,53 @@ import io
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 import boto3
 import numpy as np
+from astropy.table import QTable
 from botocore.config import Config
 from botocore.exceptions import (
     ClientError,
 )
+from dotenv import dotenv_values
+
+from ..constants.lambdas import AWS_PARAMETER_PATH
+
+
+def get_monitor_config():
+    """Fetch the monitor configuration from either AWS Parameter Store or a local .env file.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the monitor configuration parameters.
+    """
+    config={}
+    config["BUNDLED_DATA_DIR"] = str(Path(__file__).resolve().parent.parent / "rdmt_data")
+    config["REFERENCE_DATA_DIR"] = ""
+    try:
+        expected_parameters=["RDMT_SPIRE_L4_BUCKET", "RDMT_SPIRE_RDATA_BUCKET"]
+        result= fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters)
+        config["L4_ARCHIVE_DIR"] = f"s3://{result['RDMT_SPIRE_L4_BUCKET']}"
+        config["REFERENCE_DATA_DIR"] = f"s3://{result['RDMT_SPIRE_RDATA_BUCKET']}"
+    except KeyError as e:
+        print(f"Error fetching monitor config from AWS Parameter Store: {e}")
+        raise e
+    except Exception:
+        expected_parameters=["L4_ARCHIVE_DIR", "REFERENCE_DATA_DIR", "RDMT_SPIRE_L2_DIR"]
+        result = dotenv_values('.env')
+        missing_params = set(expected_parameters) - set(result.keys())
+        if missing_params:
+            # We do not raise an exception here because
+            # want to conditionally select or skip unit tests based on the available configuration
+            print("Error fetching monitor config from .env file.", missing_params)
+            # raise e
+        for key in expected_parameters:
+            if key in result:
+                config[key]=result[key]
+    return config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -349,4 +388,34 @@ def file_exists(bucket_name: str, key_name: str, config=None):
                 raise e
     else:
         return os.path.exists(os.path.join(bucket_name, key_name))
+
+
+def csv2qtable(bucket_name, filename: str, lower: bool = True, config=None) -> QTable:
+    """
+    Load a CSV or ECSV file from a local directory or an S3 bucket and return it as a QTable.
+
+    Parameters
+    ----------
+    bucket_name : str
+        path to the S3 bucket (or local directory) that is storing the file.
+        If the path starts with "s3://", it is treated as an S3 bucket; otherwise, 
+        it is treated as a local directory.
+    filename : str
+        name of the file to be loaded.
+    lower : bool, optional
+        If True, convert all column names to lowercase. Default is True.
+    config : botocore.config.Config, optional
+        Needed for anonymous access to public S3 buckets, by setting:
+    """
+    file_object = load_file_object(bucket_name, filename, config=config)
+    if filename.endswith(".ecsv"):
+        content = file_object.read().decode("utf-8")
+        df = QTable.read(content.replace("\t", " "), format="ascii.ecsv")
+    else:
+        df = QTable.read(file_object, format="ascii.csv")
+
+    # use lowercase for all column names
+    for col in df.colnames:
+        df.rename_column(col, col.strip().lower())
+    return df
 
