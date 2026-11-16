@@ -435,18 +435,20 @@ def crossmatch_with_gaia(af: asdf.AsdfFile, cat: QTable):
     max_sep = np.inf * u.arcsec
     matched_mask = sep < max_sep
 
-    # print(f"Number of matched sources: {np.sum(matched_mask)}")
+    logger.info("Gaia crossmatch: Number of matched sources: %d", np.sum(matched_mask))
 
     # Build the matched catalog with Gaia information attached
     matched_cat = cat[idx[matched_mask]].copy()
+    logger.info(f"DEBUG: Matched catalog has {len(matched_cat)} sources")
+
     matched_cat["angsep_gaia"] = sep[matched_mask].to(u.arcsec)
     for key in ["source_id", "ra", "dec"]:
         matched_cat[f"gaia_{key}"] = gaia_cat[key][matched_mask].copy()
     for key in ["phot_g_mean_mag", "phot_bp_mean_mag", "phot_rp_mean_mag"]:
         matched_cat[key] = gaia_cat[key][matched_mask].copy()
 
-    stats = gaia_astrometry_stats(matched_cat)
-    print(stats)
+    stats = gaia_astrometry_stats(matched_cat, max_sep=max_sep)
+    logger.info("Gaia crossmatch: Gaia astrometry stats: %s", stats)
 
     return matched_cat
 
