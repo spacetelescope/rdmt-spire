@@ -148,7 +148,7 @@ def test_photoastro_calculate_metrics_builds_expected_bright_and_faint_cards(
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_median_faint"].data_value == pytest.approx(1.25)
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_n_sources_bright"].data_value == 0
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_n_sources_faint"].data_value == 1
-    assert monitor.data["angsep_gaia_astro_medae"].data_value == pytest.approx(0.1)
+    assert monitor.data["angsep_gaia_photoastro_medae"].data_value == pytest.approx(0.1)
 
 
 

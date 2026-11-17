@@ -78,7 +78,7 @@ class PhotoAstroMonitor(BaseMonitor):
         # Define statistics/metrics for each property in each magnitude bin
         self.prop_list = []
         for prop_name, prop_unit, stat_style, outlier_thresholds in photoastro_constants.PROPERTIES:
-            if 'angsep_gaia_astro' in prop_name:
+            if 'angsep_gaia_photoastro' in prop_name:
                 self.prop_list.append(Property(prop_name, stat_style, suffix1="", outlier_thresholds=outlier_thresholds))
             else:
                 for suffix1 in photoastro_constants.SUFFIX1:
@@ -107,12 +107,12 @@ class PhotoAstroMonitor(BaseMonitor):
             flux_err_theory = wfi_properties.get_psf_flux_error_theory(optical_filter, df_cat["psf_flux"][cond], t_exp)
             df[f"flux_err_ratio_psf_theory_custom{mag_bin}"] = df_cat["psf_flux_err"][cond] / flux_err_theory
 
-            # Cross-match with Gaia to get angular separation
-            if "angsep_gaia_astro" in self.properties:
-                cond = cond_both
-                cat = Table({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
-                matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
-                df["angsep_gaia_astro"] = matched_cat["angsep_gaia"]
+        # Cross-match with Gaia to get angular separation
+        if "angsep_gaia_photoastro" in self.properties:
+            cond = cond_both
+            cat = Table({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
+            matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
+            df["angsep_gaia_photoastro"] = matched_cat["angsep_gaia"]
 
         # Compute statistics for each property in each magnitude bin
         for prop in self.prop_list:

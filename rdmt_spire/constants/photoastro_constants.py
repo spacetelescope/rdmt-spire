@@ -10,11 +10,11 @@ PROPERTIES = [
     ("ee25_radius", "arcsec", 'dist1d',[np.nan,np.nan]),
     ("ee50_radius", "arcsec", 'dist1d',[np.nan,np.nan]),
     ("ee75_radius", "arcsec", 'dist1d',[np.nan,np.nan]),
-    # ("flux_ratio_aper02_aper01_phot", "", 'dist1d',[np.nan,np.nan]),
-    # ("flux_ratio_aper04_aper02_phot", "", 'dist1d',[np.nan,np.nan]),
-    # ("flux_ratio_aper08_aper04_phot", "", 'dist1d',[np.nan,np.nan]),
-    # ("flux_err_ratio_psf_theory_phot", "", 'dist1d',[np.nan,np.nan]),
-    ("angsep_gaia_astro", "arcsec", 'genchi2',[0,0.5]),
+    # ("flux_ratio_aper02_aper01_photoastro", "", 'dist1d',[np.nan,np.nan]),
+    # ("flux_ratio_aper04_aper02_photoastro", "", 'dist1d',[np.nan,np.nan]),
+    # ("flux_ratio_aper08_aper04_photoastro", "", 'dist1d',[np.nan,np.nan]),
+    # ("flux_err_ratio_psf_theory_photoastro", "", 'dist1d',[np.nan,np.nan]),
+    ("angsep_gaia_photoastro", "arcsec", 'genchi2',[0,0.5]),
 ]
 SUFFIX1 = ["_bright", "_faint"]
 
