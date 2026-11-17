@@ -14,6 +14,7 @@ from ..constants.database import (
     OBSERVATION_ID_LENGTH,
     OPTICAL_ELEMENT_LENGTH,
     SOFTWARE_VERSION_LENGTH,
+    TARGET_APERTURE_LENGTH,
     VISIT_ID_LENGTH,
     MonitorStatus,
 )
@@ -81,6 +82,12 @@ class L2ScienceMetaTable(Base):
     # Information that requires opening the file to extract
     observation_id:         Mapped[Optional[str]] = mapped_column(String(OBSERVATION_ID_LENGTH)) # from meta.observation.observation_id
     exp_start_datetime:     Mapped[Optional[datetime]] = mapped_column(DateTime(), index=True) # from meta.exposure.start_time
+    target_ra:              Mapped[Optional[float]] = mapped_column(Float(), index=True) # from meta.pointing.target_ra
+    target_dec:             Mapped[Optional[float]] = mapped_column(Float(), index=True) # from meta.pointing.target_dec
+    target_pa:              Mapped[Optional[float]] = mapped_column(Float(), index=True) # from meta.pointing.pa_aperture
+    target_aperture:         Mapped[Optional[str]] = mapped_column(String(TARGET_APERTURE_LENGTH)) # from meta.pointing.target_aperture
+    detector_ra:             Mapped[Optional[float]] = mapped_column(Float(), index=True) # from meta.wcsinfo.ra_ref
+    detector_dec:            Mapped[Optional[float]] = mapped_column(Float(), index=True) # from meta.wcsinfo.dec_ref
     romancal_version:       Mapped[Optional[str]] = mapped_column(String(SOFTWARE_VERSION_LENGTH)) # from meta.calibration_software_version
     crds_context:           Mapped[Optional[str]] = mapped_column(String(SOFTWARE_VERSION_LENGTH)) # from meta.ref_file.crds.context
     sdf_version:            Mapped[Optional[str]] = mapped_column(String(SOFTWARE_VERSION_LENGTH)) # from meta.sdf_software_version
