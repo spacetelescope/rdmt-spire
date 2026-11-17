@@ -148,7 +148,7 @@ def test_photoastro_calculate_metrics_builds_expected_bright_and_faint_cards(
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_median_faint"].data_value == pytest.approx(1.25)
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_n_sources_bright"].data_value == 0
         assert monitor.data[f"flux_ratio_aper02_aper01{suffix0}_n_sources_faint"].data_value == 1
-    assert monitor.data[f"angsep_gaia{suffix0}_medae_faint"].data_value == pytest.approx(0.1)
+    assert monitor.data[f"angsep_gaia_astro_medae"].data_value == pytest.approx(0.1)
 
 
 
@@ -193,23 +193,23 @@ def test_source_catalog_run_computes_expected_metrics(tmp_path: Path, synthetic_
 
     stats1 = ['median', 'nmad', 'mean', 'std', 'n_sources', 'f_outliers']
     stats2 = ['medae', 'rmse', 'mae', 'n_sources', 'f_outliers']
-    prop_list = ['angsep_gaia_custom','ee25_radius', 'ee50_radius', 'ee75_radius']
+    prop_list = ['angsep_gaia','ee25_radius', 'ee50_radius', 'ee75_radius']
     suffix0 = '_custom'
     for prop in monitor.properties:
-        stats = stats2 if prop == 'angsep_gaia_custom' else stats1
-        for mag_bin in ["bright", "faint"]:
+        if 'angsep_gaia' in prop:
+            stats = stats2
             for stat in stats:                
-                name = f"{prop}_{stat}_{mag_bin}"
+                name = f"{prop}_{stat}"
                 print(f"Checking {name}")
                 assert name in monitor.data
                 card=monitor.data[name]
                 assert np.isfinite(card.data_value)
-            cond = catalog['is_bright'] if mag_bin == "bright" else ~catalog['is_bright']
-            name1=f"{prop}_{'n_sources'}_{mag_bin}"
+            cond = catalog['is_bright'] | ~catalog['is_bright']
+            name1=f"{prop}_{'n_sources'}"
             assert monitor.data[name1].data_value == np.sum(cond)
             if prop in prop_list:
                 print(prop)
-                name=f"{prop}_{stats[0]}_{mag_bin}"
+                name=f"{prop}_{stats[0]}"
                 prop_cat=prop.removesuffix(suffix0)
                 print(f"{name:40}, {monitor.data[name].data_value:8f}, {np.median(catalog[prop_cat][cond]):8f}, {np.sum(cond)}, {monitor.data[name1].data_value}, {monitor.data[name].evaluation_value}")
                 assert monitor.data[name].data_value == pytest.approx(np.median(catalog[prop_cat][cond].value), rel=1e-6)
@@ -217,3 +217,25 @@ def test_source_catalog_run_computes_expected_metrics(tmp_path: Path, synthetic_
                     assert monitor.data[name].evaluation_value is False
                 else:
                     assert monitor.data[name].evaluation_value is True
+        else:
+            stats = stats1
+            for mag_bin in ["bright", "faint"]:
+                for stat in stats:                
+                    name = f"{prop}_{stat}_{mag_bin}"
+                    print(f"Checking {name}")
+                    assert name in monitor.data
+                    card=monitor.data[name]
+                    assert np.isfinite(card.data_value)
+                cond = catalog['is_bright'] if mag_bin == "bright" else ~catalog['is_bright']
+                name1=f"{prop}_{'n_sources'}_{mag_bin}"
+                assert monitor.data[name1].data_value == np.sum(cond)
+                if prop in prop_list:
+                    print(prop)
+                    name=f"{prop}_{stats[0]}_{mag_bin}"
+                    prop_cat=prop.removesuffix(suffix0)
+                    print(f"{name:40}, {monitor.data[name].data_value:8f}, {np.median(catalog[prop_cat][cond]):8f}, {np.sum(cond)}, {monitor.data[name1].data_value}, {monitor.data[name].evaluation_value}")
+                    assert monitor.data[name].data_value == pytest.approx(np.median(catalog[prop_cat][cond].value), rel=1e-6)
+                    if prop == 'ellipticity':
+                        assert monitor.data[name].evaluation_value is False
+                    else:
+                        assert monitor.data[name].evaluation_value is True

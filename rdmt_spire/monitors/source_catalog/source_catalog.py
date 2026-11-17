@@ -124,7 +124,7 @@ class SourceCatalogMonitor(BaseMonitor):
                 cond[invalid_pixels] = False # Mark invalid pixel positions as False in the selection condition
             cat = QTable({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
             matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
-            df[f"angsep_gaia"] = matched_cat["angsep_gaia"]
+            df["angsep_gaia"] = matched_cat["angsep_gaia"]
 
         # Compute statistics for each property in each magnitude bin
         for prop in self.prop_list:

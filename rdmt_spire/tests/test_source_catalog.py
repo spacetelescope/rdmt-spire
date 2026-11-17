@@ -135,25 +135,45 @@ def test_source_catalog_run_computes_expected_metrics(tmp_path: Path, synthetic_
     stats2 = ['medae', 'rmse', 'mae', 'n_sources', 'f_outliers']
     prop_list = ['angsep_gaia','sharpness', 'roundness1', 'ellipticity']
     for prop in monitor.properties:
-        stats = stats2 if prop == 'angsep_gaia' else stats1
-        for mag_bin in ["bright", "faint"]:
+        if prop == 'angsep_gaia':
+            stats = stats2
             for stat in stats:
-                name = f"{prop}_{stat}_{mag_bin}"
+                name = f"{prop}_{stat}"
                 print(f"Checking {name}")
                 assert name in monitor.data
                 card=monitor.data[name]
                 assert np.isfinite(card.data_value)
-            cond = table['is_bright'] if mag_bin == "bright" else ~table['is_bright']
-            name1=f"{prop}_{'n_sources'}_{mag_bin}"
+            cond = table['is_bright'] | ~table['is_bright'] # all sources
+            name1=f"{prop}_{'n_sources'}"
             assert monitor.data[name1].data_value == np.sum(cond)
             if prop in prop_list:
-                name=f"{prop}_{stats[0]}_{mag_bin}"
+                name=f"{prop}_{stats[0]}"
                 print(f"{name:40}, {monitor.data[name].data_value:8f}, {np.median(table[prop][cond]):8f}, {np.sum(cond)}, {monitor.data[name1].data_value}, {monitor.data[name].evaluation_value}")
                 assert monitor.data[name].data_value == pytest.approx(np.median(table[prop][cond].value), rel=1e-6)
                 if prop == 'ellipticity':
                     assert monitor.data[name].evaluation_value is False
                 else:
                     assert monitor.data[name].evaluation_value is True
+        else:
+            stats = stats1
+            for mag_bin in ["bright", "faint"]:
+                for stat in stats:
+                    name = f"{prop}_{stat}_{mag_bin}"
+                    print(f"Checking {name}")
+                    assert name in monitor.data
+                    card=monitor.data[name]
+                    assert np.isfinite(card.data_value)
+                cond = table['is_bright'] if mag_bin == "bright" else ~table['is_bright']
+                name1=f"{prop}_{'n_sources'}_{mag_bin}"
+                assert monitor.data[name1].data_value == np.sum(cond)
+                if prop in prop_list:
+                    name=f"{prop}_{stats[0]}_{mag_bin}"
+                    print(f"{name:40}, {monitor.data[name].data_value:8f}, {np.median(table[prop][cond]):8f}, {np.sum(cond)}, {monitor.data[name1].data_value}, {monitor.data[name].evaluation_value}")
+                    assert monitor.data[name].data_value == pytest.approx(np.median(table[prop][cond].value), rel=1e-6)
+                    if prop == 'ellipticity':
+                        assert monitor.data[name].evaluation_value is False
+                    else:
+                        assert monitor.data[name].evaluation_value is True
 
 
 def test_source_catalog_requires_is_extended_column(tmp_path: Path, synthetic_config: dict[str, str]) -> None:

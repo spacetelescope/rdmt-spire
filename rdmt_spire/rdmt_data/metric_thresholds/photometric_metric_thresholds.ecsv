@@ -172,7 +172,7 @@ flux_err_ratio_psf_theory_custom_nmad_faint_f146,0.0,2.0,None
 flux_err_ratio_psf_theory_custom_nmad_faint_f158,0.0,2.0,None
 flux_err_ratio_psf_theory_custom_nmad_faint_f184,0.0,2.0,None
 flux_err_ratio_psf_theory_custom_nmad_faint_f213,0.0,2.0,None
-angsep_gaia_custom_medae,0.0,0.5,arcsec
+angsep_gaia_astro_medae,0.0,0.5,arcsec
 ee25_radius_median,0.0,0.5,arcsec
 ee50_radius_median,0.0,0.5,arcsec
 ee75_radius_median,0.0,0.5,arcsec
