@@ -73,11 +73,15 @@ class SourceCatalogMonitor(BaseMonitor):
         mab = wfi_properties.ab_magnitude(df_cat["psf_flux"])
         cond_bright = (mab > m_sat) & (mab <= m_mid)
         cond_faint = (mab > m_mid) & (mab < m_faint)
+        cond_both = cond_bright | cond_faint
 
         self.prop_list = []
         for prop_name, prop_unit, stat_style, outlier_thresholds in source_catalog_constants.PROPERTIES:
-            for suffix1 in source_catalog_constants.SUFFIX1:
-                self.prop_list.append(Property(prop_name, stat_style, suffix1=suffix1, outlier_thresholds=outlier_thresholds))
+            if 'angsep_gaia' in prop_name:
+                self.prop_list.append(Property(prop_name, stat_style, suffix1="", outlier_thresholds=outlier_thresholds))
+            else:
+                for suffix1 in source_catalog_constants.SUFFIX1:
+                    self.prop_list.append(Property(prop_name, stat_style, suffix1=suffix1, outlier_thresholds=outlier_thresholds))
 
         # Initialize dictionary to hold data for each property in each magnitude bin
         df = {}
@@ -99,27 +103,28 @@ class SourceCatalogMonitor(BaseMonitor):
             flux_err_theory = wfi_properties.get_psf_flux_error_theory(optical_filter, df_cat["psf_flux"][cond], t_exp)
             df[f"flux_err_ratio_psf_theory{mag_bin}"] = df_cat["psf_flux_err"][cond] / flux_err_theory
 
-            # Cross-match with Gaia to get angular separation
-            if "angsep_gaia" in self.properties:
-                selected_rows = np.flatnonzero(cond)
-                invalid_pixels = ~np.isfinite(df_cat["x_psf"][cond].value) | ~np.isfinite(df_cat["y_psf"][cond].value)
-    
-                if np.any(invalid_pixels):
-                    # These indices refer to df_cat after the is_extended filter.
-                    bad_rows = selected_rows[invalid_pixels][:10]
-                    diagnostic_columns = [
-                        name for name in ("id", "label", "x_psf", "y_psf", "psf_flags", "psf_flux", "psf_flux_err")
-                        if name in df_cat.colnames
-                    ]
-                    logger.warning(
-                        "SourceCatalogMonitor: bin=%s first 10 invalid position rows "
-                        "(point-source catalog indices=%s):\n%s",
-                        mag_bin, bad_rows.tolist(), df_cat[diagnostic_columns][bad_rows],
-                    )
-                    cond[invalid_pixels] = False # Mark invalid pixel positions as False in the selection condition
-                cat = QTable({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
-                matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
-                df[f"angsep_gaia{mag_bin}"] = matched_cat["angsep_gaia"]
+        # Cross-match with Gaia to get angular separation
+        if "angsep_gaia" in self.properties:
+            cond = cond_both
+            selected_rows = np.flatnonzero(cond)
+            invalid_pixels = ~np.isfinite(df_cat["x_psf"][cond].value) | ~np.isfinite(df_cat["y_psf"][cond].value)
+
+            if np.any(invalid_pixels):
+                # These indices refer to df_cat after the is_extended filter.
+                bad_rows = selected_rows[invalid_pixels][:10]
+                diagnostic_columns = [
+                    name for name in ("id", "label", "x_psf", "y_psf", "psf_flags", "psf_flux", "psf_flux_err")
+                    if name in df_cat.colnames
+                ]
+                logger.warning(
+                    "SourceCatalogMonitor: bin=both first 10 invalid position rows "
+                    "(point-source catalog indices=%s):\n%s",
+                     bad_rows.tolist(), df_cat[diagnostic_columns][bad_rows],
+                )
+                cond[invalid_pixels] = False # Mark invalid pixel positions as False in the selection condition
+            cat = QTable({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
+            matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
+            df[f"angsep_gaia"] = matched_cat["angsep_gaia"]
 
         # Compute statistics for each property in each magnitude bin
         for prop in self.prop_list:

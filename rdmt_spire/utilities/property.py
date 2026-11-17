@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Sequence
@@ -17,6 +18,7 @@ __all__ = [
     "MetricCard",
 ]
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricCard:
@@ -37,7 +39,7 @@ class MetricCard:
     ) -> None:
         vmin, vmax = self.get_metric_threshold(metric_thresholds, self.data_name, suffix1, suffix2)
         x = self.data_value * u.Unit(self.data_unit)
-        print(self.data_name, "x:", x, "vmin:", vmin, "vmax:", vmax, "error:", error, "nsigma:", nsigma, "data_unit:", self.data_unit)
+        logger.info(f"Property evaluation: {self.data_name} x: {x}, min threshold: {vmin}, max threshold: {vmax}, err: {error}, nsigma: {nsigma}, data unit: {self.data_unit}")
 
         if np.isfinite(self.data_value):
             if (x < vmin - nsigma * error) or (x > vmax + nsigma * error):
