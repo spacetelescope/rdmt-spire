@@ -134,7 +134,11 @@ def _add_science_results_columns(cls):
     for monitor_constants in [source_catalog_constants, photoastro_constants]:
 
         for prop_name, prop_unit, stat_style, outlier_thresholds in monitor_constants.PROPERTIES:
-            for suffix1 in monitor_constants.SUFFIX1:
+            if "angsep_gaia" in prop_name:
+                suffixes = [""]
+            else:
+                suffixes = monitor_constants.SUFFIX1
+            for suffix1 in suffixes:
                 property = Property(prop_name, stat_style, suffix1=suffix1, outlier_thresholds=outlier_thresholds)
                 property.compute(x, prop_unit)
                 for card in property.cards.values():

@@ -15,7 +15,7 @@ PROPERTIES = [
     ("flux_ratio_aper04_aper02", "", 'dist1d',[np.nan,np.nan]),
     ("flux_ratio_aper08_aper04", "", 'dist1d',[np.nan,np.nan]),
     ("flux_err_ratio_psf_theory", "", 'dist1d',[np.nan,np.nan]),
-    ("angsep_gaia", "arcsec", 'genchi2',[0,0.5]),
+    ("angsep_gaia", "arcsec", 'genchi2',[0,0.5]), # Angular separation does not have a suffix
 ]
 SUFFIX1 = ["_bright", "_faint"]
 
