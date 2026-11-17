@@ -112,7 +112,7 @@ class PhotoAstroMonitor(BaseMonitor):
                 cond = cond_both
                 cat = Table({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
                 matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
-                df[f"angsep_gaia_astro"] = matched_cat["angsep_gaia"]
+                df["angsep_gaia_astro"] = matched_cat["angsep_gaia"]
 
         # Compute statistics for each property in each magnitude bin
         for prop in self.prop_list:
