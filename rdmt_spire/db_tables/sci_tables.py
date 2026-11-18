@@ -27,6 +27,9 @@ class L4SourceCatalogL2MetaTable(Base):
     """Class containing schema for the L4 Science data metadata table."""
 
     __tablename__ = "l4_source_catalog_l2_meta"
+    # Used for mapping the table classes to the file types they relate to
+    file_type = FileTypes.L4_SOURCE_CATALOG_L2
+    
     # Information from the DMD SNS notification
     filename:               Mapped[str] = mapped_column(String(FILENAME_LENGTH), primary_key=True) # body['filename']
     filename_l2:            Mapped[str] = mapped_column(String(FILENAME_LENGTH)) # with suffix changed to '_cal.asdf'
@@ -36,17 +39,6 @@ class L4SourceCatalogL2MetaTable(Base):
     archive_bucket:         Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveBucket']
     archive_key:            Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveObjectKey']
 
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "filename_l2",
-            "reprocess_number",
-            "archive_bucket",
-            "archive_key",
-        ]
-    
-    # Used for mapping the table classes to the file types they relate to
-    file_type = FileTypes.L4_SOURCE_CATALOG_L2
 
 class L2ScienceMetaTable(Base):
     """Class containing schema for the L2 Science data metadata table."""
@@ -93,31 +85,6 @@ class L2ScienceMetaTable(Base):
     # periodic monitors are run on a schedule and may not be run for every file. The status is set to -1 if the monitor should not be run for this file.   
     astrometry_status:      Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.PENDING_CHECK)) # populated by Spire
     source_catalog_status:  Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.PENDING_CHECK)) # populated by Spire
-
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "reprocess_number",
-            "program_number",
-            "exposure_number",
-            "visit_id",
-            "detector",
-            "optical_element",
-            "archive_bucket",
-            "archive_key",
-            "file_created_datetime",
-            "dmd_notify_datetime",
-            "data_release_id",
-            "observation_id",
-            "exp_start_datetime",
-            "romancal_version",
-            "crds_context",
-            "sdf_version",
-            "monitor_end_datetime",
-            "essential_status",
-            "astrometry_status",
-            "source_catalog_status",
-        ]
     
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L2_SCIENCE
@@ -232,74 +199,6 @@ class L2ScienceResultsTable(ResultsBase):
     p95_ramp_value_eval:   Mapped[Optional[bool]]  = mapped_column(Boolean())
     p05_ramp_value:        Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     p05_ramp_value_eval:   Mapped[Optional[bool]]  = mapped_column(Boolean())
-    
-
-    def _get_verification_columns(self):
-        cols = [
-            "filename",
-            "reprocess_number",
-            "astrometric_offset",
-            "astrometric_offset_eval",
-            "num_astrometric_sources",
-            "num_astrometric_sources_eval",
-            "noise_1f_power_ratio",
-            "noise_1f_power_ratio_eval",
-            "plate_scale_center_x",
-            "plate_scale_center_x_eval",
-            "plate_scale_center_y",
-            "plate_scale_center_y_eval",
-            "delta_plate_scale_center",
-            "delta_plate_scale_center_eval",
-            "delta_plate_scale_corner_bl",
-            "delta_plate_scale_corner_bl_eval",
-            "delta_plate_scale_corner_br",
-            "delta_plate_scale_corner_br_eval",
-            "delta_plate_scale_corner_tl",
-            "delta_plate_scale_corner_tl_eval",
-            "delta_plate_scale_corner_tr",
-            "delta_plate_scale_corner_tr_eval",
-            "plate_scale_corner_bl_x",
-            "plate_scale_corner_bl_x_eval",
-            "plate_scale_corner_bl_y",
-            "plate_scale_corner_bl_y_eval",
-            "plate_scale_corner_br_x",
-            "plate_scale_corner_br_x_eval",
-            "plate_scale_corner_br_y",
-            "plate_scale_corner_br_y_eval",
-            "plate_scale_corner_tl_x",
-            "plate_scale_corner_tl_x_eval",
-            "plate_scale_corner_tl_y",
-            "plate_scale_corner_tl_y_eval",
-            "plate_scale_corner_tr_x",
-            "plate_scale_corner_tr_x_eval",
-            "plate_scale_corner_tr_y",
-            "plate_scale_corner_tr_y_eval",
-            "n_saturated_pix",
-            "n_saturated_pix_eval",
-            "min_ramp_value",
-            "min_ramp_value_eval",
-            "max_ramp_value",
-            "max_ramp_value_eval",
-            "mean_ramp_value",
-            "mean_ramp_value_eval",
-            "median_ramp_value",
-            "median_ramp_value_eval",
-            "std_ramp_value",
-            "std_ramp_value_eval",
-            "p95_ramp_value",
-            "p95_ramp_value_eval",
-            "p05_ramp_value",
-            "p05_ramp_value_eval",
-        ]
-
-        cols.extend(
-            column.name
-            for column in self.__table__.columns
-            if column.name not in cols
-        )
-
-        return cols
-    
 
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L2_SCIENCE

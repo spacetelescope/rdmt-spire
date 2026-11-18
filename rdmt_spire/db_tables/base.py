@@ -78,8 +78,7 @@ class Base(DeclarativeBase):
     def _get_verification_columns(self) -> list:
         """List which columns to verify if two classes are equal using _verify().
         
-        This function is a placeholder. 
-        It needs to be updated in each subclass. 
+        By default, all columns returned by _get_columns() are verified.
 
         Returns
         -------
@@ -87,7 +86,7 @@ class Base(DeclarativeBase):
             contains the column names that should be verified in each table
             
         """
-        raise NotImplementedError
+        return self._get_columns()
 
     def _verify(self, other, retry_write: bool = True, 
                 return_result: bool = False):

@@ -48,26 +48,6 @@ class L1GuideWindowMetaTable(Base):
     # 0 indicates the monitor still needs to be run
     # 1 indicates the monitor ran successfully
     essential_status:         Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.NEEDS_TO_RUN)) # populated by Spire
-
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "reprocess_number",
-            "program_number",
-            "gw_acquisition_number",
-            "acquisition_id",
-            "acq_start_datetime",
-            "visit_id",
-            "detector",
-            "optical_element",
-            "archive_bucket",
-            "archive_key",
-            "file_created_datetime",
-            "dmd_notify_datetime",
-            "sdf_version",
-            "monitor_end_datetime",
-            "essential_status",
-        ]
     
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L1_GUIDE_WINDOW
@@ -115,40 +95,6 @@ class L1GuideWindowResultsTable(ResultsBase):
 
     rms_centroid_offset:         Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     rms_centroid_offset_eval:    Mapped[Optional[bool]] = mapped_column(Boolean()) 
-
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "reprocess_number",
-            "acquisition_status",
-            "acquisition_status_eval",
-            "saturation_status",
-            "saturation_status_eval",
-            "median_background",
-            "median_background_eval",
-            "mean_noise",
-            "mean_noise_eval",
-            "median_background_std",
-            "median_background_std_eval",
-            "noise_std",
-            "noise_std_eval",
-            "num_background_outliers",
-            "num_background_outliers_eval",
-            "num_noise_outliers",
-            "num_noise_outliers_eval",
-            "mean_count_rate",
-            "mean_count_rate_eval",
-            "std_count_rate",
-            "std_count_rate_eval",
-            "num_count_rate_outliers",
-            "num_count_rate_outliers_eval",
-            "rms_x_centroid_error",
-            "rms_x_centroid_error_eval",
-            "rms_y_centroid_error",
-            "rms_y_centroid_error_eval",
-            "rms_centroid_offset",
-            "rms_centroid_offset_eval",
-        ]
 
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L1_GUIDE_WINDOW
