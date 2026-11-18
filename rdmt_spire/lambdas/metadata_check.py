@@ -124,7 +124,7 @@ def metadata_check_function(message_dict, aws_account_id):
         # The implementation below will overwrite rules for the same column if the same column appears in both 
         # selecting_rules and waiting_rules. This should be avoided.
 
-        logger.info("Defining rules for deterministic behaviour based on file properties...")
+        logger.info("Defining rules for deterministic behavior based on file properties...")
 
         deterministic_rules = {}
         # TODO: test once we have more data spread across time
@@ -262,13 +262,26 @@ def metadata_check_function(message_dict, aws_account_id):
                     )
                     logger.info(f"Message sent for {queue_item['name']}. Response: {response}")
                 except Exception as e:
-                    logger.error(f"Failed in sending message for {queue_item['name']}: {e}")
-                    raise e                
+                    logger.exception(f"Metadata check: Failed in sending message for {queue_item['name']}")
+                    raise              
 
-    logger.info('Successfully sent all messages. Metadata check complete,')
+    triggered_str = "Monitors triggered: "
+    for queue_item in queue_list:
+        if len(queue_item['rows']) > 0:
+            triggered_str += f"{queue_item['name']}={len(queue_item['rows'])}, "
+    if triggered_str == "Monitors triggered: ":
+        triggered_str += "None"
+    else:
+        triggered_str = triggered_str.rstrip(", ")  # Remove trailing comma and space
+    
+    logger.info(
+        "Successfully sent all messages. Metadata check complete. " + triggered_str
+    )
 
     return {'statusCode': StatusCodes.SUCCESS,
-                'body': [{'message':'metadata_check_function ran successfully.'}]} 
+                'body': [{
+                    'message': 'metadata_check_function ran successfully. ' + triggered_str,
+                }]} 
 
 def every_other_rule(pk_rows, status_column):
     """

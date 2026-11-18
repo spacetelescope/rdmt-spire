@@ -78,6 +78,7 @@ def test_metadata_check_matches_l4_metadata_by_l2_filename(monkeypatch):
     response = metadata_check.metadata_check_function({}, "123456789012")
 
     assert response["statusCode"] == StatusCodes.SUCCESS
+    assert response["body"][0]["message"] == "metadata_check_function ran successfully. Monitors triggered: astrometry=0, source_catalog=1"
     sqs.send_message.assert_called_once()
     assert sqs.send_message.call_args.kwargs["QueueUrl"] == "https://test/queue"
     payload = json.loads(sqs.send_message.call_args.kwargs["MessageBody"])
