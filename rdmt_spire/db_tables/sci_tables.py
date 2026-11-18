@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 import numpy as np
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..constants import photoastro_constants, source_catalog_constants
@@ -20,7 +20,7 @@ from ..constants.database import (
 )
 from ..constants.dmd import FileTypes
 from ..utilities.property import Property
-from .base import Base, ResultsBase, NaNToNullFloat
+from .base import Base, NaNToNullFloat, ResultsBase
 
 
 class L4SourceCatalogL2MetaTable(Base):

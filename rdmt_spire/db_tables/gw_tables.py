@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..constants.database import (
@@ -14,7 +14,7 @@ from ..constants.database import (
     MonitorStatus,
 )
 from ..constants.dmd import FileTypes
-from .base import Base, ResultsBase, NaNToNullFloat
+from .base import Base, NaNToNullFloat, ResultsBase
 
 
 class L1GuideWindowMetaTable(Base):

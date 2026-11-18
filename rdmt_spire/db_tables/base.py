@@ -15,7 +15,6 @@ from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, event
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
-
 logger = logging.getLogger(__name__)
 
 class Base(DeclarativeBase):
