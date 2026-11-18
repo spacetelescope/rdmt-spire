@@ -14,7 +14,7 @@ from ..constants.database import (
     MonitorStatus,
 )
 from ..constants.dmd import FileTypes
-from .base import Base, ResultsBase
+from .base import Base, ResultsBase, NaNToNullFloat
 
 
 class L1GuideWindowMetaTable(Base):
@@ -87,13 +87,13 @@ class L1GuideWindowResultsTable(ResultsBase):
     saturation_status:           Mapped[Optional[str]] = mapped_column(String(20))
     saturation_status_eval:      Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    median_background:           Mapped[Optional[float]] = mapped_column(Float())
+    median_background:           Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     median_background_eval:      Mapped[Optional[bool]] = mapped_column(Boolean())
-    mean_noise:                  Mapped[Optional[float]] = mapped_column(Float())
+    mean_noise:                  Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     mean_noise_eval:             Mapped[Optional[bool]] = mapped_column(Boolean())
-    median_background_std:       Mapped[Optional[float]] = mapped_column(Float())
+    median_background_std:       Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     median_background_std_eval:  Mapped[Optional[bool]] = mapped_column(Boolean())
-    noise_std:                   Mapped[Optional[float]] = mapped_column(Float())
+    noise_std:                   Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     noise_std_eval:              Mapped[Optional[bool]] = mapped_column(Boolean())
 
     num_background_outliers:        Mapped[Optional[int]] = mapped_column(Integer())
@@ -101,19 +101,19 @@ class L1GuideWindowResultsTable(ResultsBase):
     num_noise_outliers:             Mapped[Optional[int]] = mapped_column(Integer())
     num_noise_outliers_eval:        Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    mean_count_rate:                Mapped[Optional[float]] = mapped_column(Float())
+    mean_count_rate:                Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     mean_count_rate_eval:           Mapped[Optional[bool]] = mapped_column(Boolean())
-    std_count_rate:                 Mapped[Optional[float]] = mapped_column(Float())
+    std_count_rate:                 Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     std_count_rate_eval:            Mapped[Optional[bool]] = mapped_column(Boolean())
     num_count_rate_outliers:        Mapped[Optional[int]] = mapped_column(Integer())
     num_count_rate_outliers_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    rms_x_centroid_error:        Mapped[Optional[float]] = mapped_column(Float())
+    rms_x_centroid_error:        Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     rms_x_centroid_error_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
-    rms_y_centroid_error:        Mapped[Optional[float]] = mapped_column(Float()) 
+    rms_y_centroid_error:        Mapped[Optional[float]] = mapped_column(NaNToNullFloat()) 
     rms_y_centroid_error_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    rms_centroid_offset:         Mapped[Optional[float]] = mapped_column(Float())
+    rms_centroid_offset:         Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     rms_centroid_offset_eval:    Mapped[Optional[bool]] = mapped_column(Boolean()) 
 
     def _get_verification_columns(self):

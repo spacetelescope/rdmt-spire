@@ -9,10 +9,14 @@ Copied from rtbdb code.
 import datetime
 import inspect
 import logging
+import math
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, event
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.types import TypeDecorator
 
+
+logger = logging.getLogger(__name__)
 
 class Base(DeclarativeBase):
     """Base table class for using SQLAlchemy for database interfacing.
@@ -249,3 +253,26 @@ def configure_listener(class_, key, inst):
             return validator(class_, key, value)
         else:
             return value
+
+
+class NaNToNullFloat(TypeDecorator):
+    """Store floating-point NaN as SQL NULL and return it as None."""
+
+    impl = Float
+    cache_ok = True
+
+    @staticmethod
+    def _normalize(value, operation):
+        if value is not None and math.isnan(value):
+            logger.warning(
+                "Converted NaN to None while %s a database value",
+                operation,
+            )
+            return None
+        return value
+
+    def process_bind_param(self, value, dialect):
+        return self._normalize(value, "writing")
+
+    def process_result_value(self, value, dialect):
+        return self._normalize(value, "reading")
