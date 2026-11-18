@@ -11,7 +11,7 @@ import inspect
 import logging
 import math
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, event
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, event
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
@@ -253,6 +253,13 @@ def configure_listener(class_, key, inst):
         else:
             return value
 
+# Listen for when a Column is attached to a table to label NaNToNullFloat columns with their full name.
+@event.listens_for(Column, "after_parent_attach")
+def label_nan_column(column, table):
+    if isinstance(column.type, NaNToNullFloat):
+        # Give each column its own type instance, even if one was reused.
+        column.type = column.type.copy()
+        column.type.column_name = f"{table.fullname}.{column.name}"
 
 class NaNToNullFloat(TypeDecorator):
     """Store floating-point NaN as SQL NULL and return it as None."""
@@ -260,12 +267,14 @@ class NaNToNullFloat(TypeDecorator):
     impl = Float
     cache_ok = True
 
-    @staticmethod
-    def _normalize(value, operation):
+    column_name = None
+
+    def _normalize(self, value, operation):
         if value is not None and math.isnan(value):
             logger.warning(
-                "Converted NaN to None while %s a database value",
+                "Converted NaN to None while %s column %s",
                 operation,
+                self.column_name,
             )
             return None
         return value
