@@ -123,7 +123,12 @@ class SourceCatalogMonitor(BaseMonitor):
                 )
                 cond[invalid_pixels] = False # Mark invalid pixel positions as False in the selection condition
             cat = QTable({"x_psf": df_cat["x_psf"][cond], "y_psf": df_cat["y_psf"][cond]})
-            matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
+            # if there are no valid pixels, skip cross-matching
+            if len(cat) > 0:
+                matched_cat = crossmatch_with_gaia(self.asdf_file, cat)
+            else:
+                logger.warning("SourceCatalogMonitor: no valid source catalog sources for cross-matching with Gaia.")
+                matched_cat = QTable({"x_psf": [], "y_psf": [], "angsep_gaia": []})
             df["angsep_gaia"] = matched_cat["angsep_gaia"]
 
         # Compute statistics for each property in each magnitude bin
