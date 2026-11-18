@@ -6,7 +6,6 @@ from pathlib import Path
 import asdf
 from sqlalchemy.orm import Session
 
-from ..constants.codes import StatusCodes
 from ..constants.database import MonitorStatus
 from ..constants.dmd import FileTypes
 from ..constants.lambdas import (
@@ -58,31 +57,23 @@ def monitor_function(message_dict):
     """
     s3_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
     s3_object_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
-    try:
-        content = load_s3_object(s3_bucket, s3_object_key)
-        af = asdf.open(content)
+    content = load_s3_object(s3_bucket, s3_object_key)
+    with asdf.open(content) as af:
         logger.info(f'Loaded {message_dict[MessageKeys.FILENAME]}.')            
-    except Exception as e:
-        logger.error(f'error loading the asdf file: {e}')
-        return {'statusCode': StatusCodes.FAILURE,
-                'body': [{'error_message': e}]}
-    
+        expected_parameters = AWS_DBS.copy()
+        if message_dict[MessageKeys.MONITOR_NAME] in [MonitorGroupName.SOURCE_CATALOG, MonitorGroupName.ASTROMETRY]:
+            expected_parameters.append(REFERENCE_DATA_BUCKET)
+        params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=expected_parameters)
 
-    expected_parameters = AWS_DBS.copy()
-    if message_dict[MessageKeys.MONITOR_NAME] in [MonitorGroupName.SOURCE_CATALOG, MonitorGroupName.ASTROMETRY]:
-        expected_parameters.append(REFERENCE_DATA_BUCKET)
-    params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=expected_parameters)
+        monitor_config = generate_monitor_config(message_dict, params)
 
-    monitor_config = generate_monitor_config(message_dict, params)
+        logger.info(f'Running {message_dict[MessageKeys.MONITOR_NAME]} monitor(s).')
+        monitor_manager = MonitorManager(af, message_dict[MessageKeys.MONITOR_NAME], monitor_config=monitor_config)
+        monitor_manager.process()
+        logger.info('Finished monitor execution.')
 
-    logger.info(f'Running {message_dict[MessageKeys.MONITOR_NAME]} monitor(s).')
-    monitor_manager = MonitorManager(af, message_dict[MessageKeys.MONITOR_NAME], monitor_config=monitor_config)
-    monitor_manager.process()
-    logger.info('Finished monitor execution.')
-
-    # clean up memory
-    metadata_dict = copy.deepcopy(af['roman']['meta'])
-    af.close()
+        # clean up memory
+        metadata_dict = copy.deepcopy(af['roman']['meta'])
     del content
 
     # determine the database tables to use
@@ -221,6 +212,10 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
 
     """
     meta_row = session.get(metadata_table_class, (filename, reprocess_number))
+    if meta_row is None:
+        logger.error(f"Metadata row not found for filename={filename} and reprocess_number={reprocess_number}")
+        raise RuntimeError(f"Metadata row not found for filename={filename} and reprocess_number={reprocess_number}")
+    
     col_names = metadata_table_class.__table__.c.keys()
 
     # handle writing several different essential monitors to single status
@@ -232,7 +227,8 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
     if monitor_status_str in col_names:
         setattr(meta_row, monitor_status_str, int(MonitorStatus.COMPLETE))
     else:
-        logger.warning(f"Monitor ({monitor_name}) ran successfully, but {monitor_status_str} is not a column in the metadata table. Not updating status.")
+        logger.error(f"Monitor ({monitor_name}) ran successfully, but {monitor_status_str} is not a column in the metadata table.")
+        raise RuntimeError(f"Monitor ({monitor_name}) ran successfully, but {monitor_status_str} is not a column in the metadata table.")
     
     if not meta_row.sdf_version:
         logger.info("Metadata row is missing key fields; populating from ASDF metadata.")
@@ -246,6 +242,7 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
             meta_row.acq_start_datetime = metadata_dict['t_start'].to_datetime(timezone=timezone.utc)
             meta_row.sdf_version = metadata_dict['sdf_software_version']
         else:
-            logger.warning(f"Metadata table class {metadata_table_class.__name__} has unrecognized file type {metadata_table_class.file_type}. Not populating metadata fields.")
+            logger.error(f"Metadata table class {metadata_table_class.__name__} has unrecognized file type {metadata_table_class.file_type}.")
+            raise RuntimeError(f"Metadata table class {metadata_table_class.__name__} has unrecognized file type {metadata_table_class.file_type}.")
 
     session.flush()

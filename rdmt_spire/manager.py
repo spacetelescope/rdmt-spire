@@ -35,23 +35,17 @@ class MonitorManager:
         else:
             logger.info(f"MonitorManager: initialized with input file object: {input_file}")
 
-        try:
-            # Extracting the asdf file tree
-            if isinstance(input_file, asdf.AsdfFile):
-                self.asdf_file = input_file
+        # Extracting the asdf file tree
+        if isinstance(input_file, asdf.AsdfFile):
+            self.asdf_file = input_file
 
-            elif os.path.exists(input_file):
-                self.asdf_file = asdf.open(input_file)
+        elif os.path.exists(input_file):
+            self.asdf_file = asdf.open(input_file)
 
-            else:
-                self.statusCode = StatusCodes.FAILURE
-                logger.error(f"MonitorManager: Invalid input file {input_file}")
-                raise ValueError(f"Invalid input file {input_file}")
-
-        except Exception as e:
+        else:
             self.statusCode = StatusCodes.FAILURE
-            logger.error(f"MonitorManager: failed to open input file: {e}")
-            raise
+            logger.error(f"MonitorManager: Invalid input file {input_file}")
+            raise ValueError(f"Invalid input file {input_file}")
 
         if monitor_name == MonitorGroupName.ESSENTIAL_WIM:
             monitor_noise_1f = import_module("rdmt_spire.monitors.noise_1f")
@@ -82,10 +76,7 @@ class MonitorManager:
 
         elif monitor_name == MonitorGroupName.ASTROMETRY:
             if monitor_config is None or "astrometry" not in monitor_config or "datadir" not in monitor_config["astrometry"]:
-                logger.error("MonitorManager: Missing 'datadir' in monitor_config for astrometry monitor.")
-                self.statusCode = StatusCodes.FAILURE
-                self.errors.append("MonitorManager: Missing 'datadir' in monitor_config for astrometry monitor.")
-                return
+                raise RuntimeError("MonitorManager: Missing 'datadir' in monitor_config for astrometry monitor.")
             
             monitor_astrometry = import_module("rdmt_spire.monitors.astrometry")
             self.monitor_objects.append(
@@ -132,20 +123,7 @@ class MonitorManager:
             )
 
         else:
-            self.statusCode = StatusCodes.FAILURE
-            self.errors.append(f"MonitorManager: Monitor not found: {monitor_name}")
-
-    def print_logs(self):
-        """
-        Prints logs and errors helpful for debugging
-        """
-        print("Logs:")
-        for item in self.log:
-            print("    ", item)
-
-        print("Errors:")
-        for item in self.errors:
-            print("   ", item)
+            raise RuntimeError(f"MonitorManager: Monitor not found: {monitor_name}")
 
     def process(self):
         """
