@@ -67,29 +67,22 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
     dict
         A response object with the following structure:
         - ``'statusCode'`` : StatusCodes
-            ``StatusCodes.SUCCESS`` on success, or
-            ``StatusCodes.REPROCESS_NUM_DETERMINATION_FAIL`` if reprocessing number
-            determination fails.
+            ``StatusCodes.SUCCESS`` on success or ``StatusCodes.INVALID_FILE_SUFFIX`` if the file suffix is not expected.
         - ``'body'`` : list of dict
             A list containing a single dict with the key ``'error_message'`` holding a
             human-readable message (success or error detail).
 
     """
-    # For debugging
-    logger.info(f'Received message: {message_dict}')
-    
-    # Ensure the received file has a valid suffix
-    if not any(message_dict.get('filename', '').lower().endswith(suffix) for suffix in VALID_FILE_SUFFIXES):
+    # Ensure the received file has a valid suffix (currently expected for _wcs.asdf files)
+    if 'filename' not in message_dict:
+        raise ValueError("Ingest: 'filename' key is missing from message_dict.")
+    elif not any(message_dict.get('filename').lower().endswith(suffix) for suffix in VALID_FILE_SUFFIXES):
         logger.info(f'File suffix is not yet valid: {message_dict.get("filename")}.')
         return {'statusCode': StatusCodes.INVALID_FILE_SUFFIX,
                 'body': [{'error_message': f'Invalid file suffix for file: {message_dict.get("filename")}.'}]}
 
     # Unpack the message attributes into a table class
     meta_table = create_table_class_from_message(message_dict)
-    if meta_table is None:
-        logger.error('Failed to create metadata table from message.')
-        return {'statusCode': StatusCodes.METADATA_TABLE_CREATION_FAIL,
-                'body': [{'error_message': f'Failed to create metadata table from message due to unexpected file type: {message_dict.get(MessageKeys.FILE_TYPE)}.'}]}
     meta_table.dmd_notify_datetime = notification_datetime
 
     # collect relevant parameters from AWS Parameter Store
@@ -110,15 +103,9 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
 
     # Determine reprocessing number
     logger.info('Determining reprocessing number.')
-    reprocess_number, rep_num_err = determine_reprocessing_number(message_dict, previous_reprocess_nums_list[0])
-
-    if rep_num_err is None:
-        meta_table.reprocess_number = reprocess_number
-    else:
-        logger.error(rep_num_err)
-        return {'statusCode': StatusCodes.REPROCESS_NUM_DETERMINATION_FAIL,
-            'body': [{'error_message': rep_num_err}]}
-
+    reprocess_number = determine_reprocessing_number(message_dict, previous_reprocess_nums_list[0])
+    meta_table.reprocess_number = reprocess_number
+    
     # We need to save the exposure type from the metadata table before we write the table and it gets detached
     exposure_type = getattr(meta_table, 'exposure_type', None)
 
@@ -144,9 +131,8 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
         if exposure_type in ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE:
             essential_monitor_name = ESSENTIAL_MONITOR_FROM_EXPOSURE_TYPE[exposure_type]
         else:
-            logger.error(f"Unexpected exposure type: {exposure_type}")
-            return {'statusCode': StatusCodes.UNEXPECTED_EXPOSURE_TYPE,
-                    'body': [{'error_message': f'Unexpected exposure type for L2 Science File: {exposure_type}'}]}
+            raise ValueError(f"Ingest: Unexpected exposure type for L2 science file: {exposure_type}")
+            
         logger.info(f'Running {essential_monitor_name} on L2 science file.')
         message_dict[MessageKeys.MONITOR_NAME] = essential_monitor_name
 
@@ -164,21 +150,14 @@ def ingest_single(message_dict, notification_datetime, aws_account_id):
         logger.info('No monitor message will be sent for L4 source catalog L2 file.')
     
     else:
-        logger.error(f"Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
-        return {'statusCode': StatusCodes.UNEXPECTED_FILE_TYPE,
-                'body': [{'error_message': f'Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.'}]}
+        raise ValueError(f"Ingest: Unexpected file type: {message_dict[MessageKeys.FILE_TYPE]}. No monitor message will be sent.")
 
-    try:
-        if message_sqs_url is not None:
-            response = sqs_client.send_message(
-                QueueUrl=message_sqs_url,
-                MessageBody=json.dumps(message_dict)
-            )
-            logger.info(f'Sent message. Response: {response}')
-    except Exception as e:
-        logger.error(f"Failed in sending message: {e}")
-        return {'statusCode': StatusCodes.SQS_SEND_FAIL,
-                'body': [{'error_message': f'Failed in sending message: {e}'}]}
+    if message_sqs_url is not None:
+        response = sqs_client.send_message(
+            QueueUrl=message_sqs_url,
+            MessageBody=json.dumps(message_dict)
+        )
+        logger.info(f'Sent message. Response: {response}')
 
     logger.info(f'Successfully ingested {message_dict[MessageKeys.FILENAME]} (reprocess number = {reprocess_number}).')
     return {'statusCode': StatusCodes.SUCCESS,
@@ -279,8 +258,7 @@ def create_table_class_from_message(message_dict):
         meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
 
     else:
-        logger.error(f"Unsupported file type: {message_dict[MessageKeys.FILE_TYPE]}")
-        return None
+        raise ValueError(f"Ingest: Metadata table cannot be created. Unsupported file type: {message_dict[MessageKeys.FILE_TYPE]}")
 
     return meta_table
 
@@ -358,30 +336,27 @@ def determine_reprocessing_number(message_dict, previous_reprocess_nums):
         The computed reprocessing number. Defaults to ``0`` for prompt/initial
         state or when no increment applies. If an inconsistency is detected,
         this will be the best-effort computed value (often ``0``) and
-        the error will be described in ``rep_num_err``.
-    rep_num_err : Optional[str]
-        ``None`` if no inconsistency is found; otherwise, a human-readable error
-        message describing the mismatch between the message state and the
-        metadata (e.g., file not in metadata but state indicates a reprocessed/release).
+        the error will be raised as a ``ValueError`` if an inconsistency is detected.
 
     """
-    rep_num_err = None
     reprocess_num = 0
     if message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.PROMPT:
         if len(previous_reprocess_nums) > 0:
-            rep_num_err = f'File is already in metadata table, but notification has reprocessingState={ReprocessingStates.PROMPT}.'
+            raise ValueError(f'File is already in metadata table, but notification has reprocessingState={ReprocessingStates.PROMPT}.')
     elif message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.REPROCESSED:
         if len(previous_reprocess_nums) > 0:
             reprocess_num = 1 + max(previous_reprocess_nums)
         else:
-            rep_num_err = f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.REPROCESSED}.'
+            raise ValueError(f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.REPROCESSED}.')
     elif message_dict[MessageKeys.REPROCESSING_STATE] == ReprocessingStates.DATA_RELEASE:
         if len(previous_reprocess_nums) > 0:
             reprocess_num = 1 + max(previous_reprocess_nums)
         else:
-            rep_num_err = f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.DATA_RELEASE}.'
+            raise ValueError(f'File not in metadata table, but notification has reprocessingState={ReprocessingStates.DATA_RELEASE}.')
+    else:
+        raise ValueError(f"Unexpected reprocessing state: {message_dict[MessageKeys.REPROCESSING_STATE]}")
 
-    return reprocess_num, rep_num_err
+    return reprocess_num
 
 def write_new_metadata_table_rows(engine, rows_to_add):
     """
@@ -419,6 +394,7 @@ def ingest_batch(message_dicts, notification_datetimes):
     A still to be implemented version of ingest_single that handles a larger batch size of messages.
 
     """
+    raise NotImplementedError("ingest_batch() is not yet implemented.")
     # Unpack the message attributes into a table class
     meta_tables = [create_table_class_from_message(md) for md in message_dicts]
     for i, mt in enumerate(meta_tables):
