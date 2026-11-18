@@ -261,7 +261,7 @@ def metadata_check_function(message_dict, aws_account_id):
                         MessageBody=json.dumps(monitor_dict)
                     )
                     logger.info(f"Message sent for {queue_item['name']}. Response: {response}")
-                except Exception as e:
+                except Exception:
                     logger.exception(f"Metadata check: Failed in sending message for {queue_item['name']}")
                     raise              
 

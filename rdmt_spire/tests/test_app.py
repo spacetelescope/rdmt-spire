@@ -6,6 +6,7 @@ from unittest.mock import patch
 # from rdmt_spire.constants.codes import StatusCodes
 from ..app import handler
 from ..constants.codes import StatusCodes
+from ..constants.lambdas import FunctionTypes, MessageKeys
 
 #TODO: add mock s3 handler / mock SQS message
 
@@ -35,29 +36,32 @@ def test_lambda_app():
         'program_subcategory':  'HLWA',
     }
 
-    event={'Records':[{'body': json.dumps({'Message': json.dumps(base_message)})}]}
-    response=handler(event,context) 
-    assert response['statusCode'] == StatusCodes.FAILURE # This is a failure because we have not implemented AWS mocking yet
+    event = {
+        'Records': [{
+            'body': json.dumps({'Message': json.dumps(base_message)}),
+            'attributes': {'SentTimestamp': '1696517280000'},
+        }]
+    }
+    response = handler(event, context)
+    assert response['statusCode'] == StatusCodes.INVALID_FILE_SUFFIX
     assert 'error_message' in response['body'][0]
 
-    base_message['function_type'] = 'monitor'
-    base_message['monitor_name'] = 'noise_1f'
-    
-    no_monitor_message = {**base_message, 'monitor_name': 'non_existing_monitor'}
-    event={'Records':[{'body': json.dumps(no_monitor_message)}]}
-    response=handler(event,context)
+    failure_response = {'statusCode': StatusCodes.FAILURE, 'body': [{'error_message': 'expected failure'}]}
+    monitor_message = {
+        MessageKeys.FUNCTION_TYPE: FunctionTypes.MONITOR,
+        MessageKeys.MONITOR_NAME: 'non_existing_monitor',
+    }
+    event = {'Records': [{'body': json.dumps(monitor_message)}]}
+    with patch('rdmt_spire.app.monitor_function', return_value=failure_response) as monitor_handler:
+        assert handler(event, context) == failure_response
+        monitor_handler.assert_called_once_with(monitor_message)
 
-    no_file_message = {**base_message, 'archiveObjectKey':''}
-    event={'Records':[{'body': json.dumps(no_file_message)}]}
-    response=handler(event,context)
+    report_event = {MessageKeys.FUNCTION_TYPE: FunctionTypes.REPORT_GEN}
+    with patch('rdmt_spire.app.report_function', return_value=failure_response) as report_handler:
+        assert handler(report_event, context) == failure_response
+        report_handler.assert_called_once_with(None)
 
-    report_event = {'function_type':'report'}
-    response=handler(report_event,context)
-    assert response['statusCode'] == StatusCodes.FAILURE
-    assert 'error_message' in response['body'][0]
-
-    meta_event = {'function_type':'meta_check'}
-    with patch('rdmt_spire.lambdas.metadata_check.fetch_parameters_from_path', return_value={}):
-        response=handler(meta_event,context)
-    assert response['statusCode'] == StatusCodes.FAILURE # TODO: Currently generates a database connection error. Need to mock the database to fix.
-    assert 'error_message' in response['body'][0]
+    metadata_event = {MessageKeys.FUNCTION_TYPE: FunctionTypes.METADATA_CHECK}
+    with patch('rdmt_spire.app.metadata_check_function', return_value=failure_response) as metadata_handler:
+        assert handler(metadata_event, context) == failure_response
+        metadata_handler.assert_called_once_with(metadata_event, '123456789012')

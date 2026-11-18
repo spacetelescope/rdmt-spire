@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -45,14 +45,13 @@ def test_ingest_selects_only_relevant_parameters(monkeypatch, file_type, queue):
     fetch.assert_called_once_with(AWS_PARAMETER_PATH, expected_parameters=expected)
 
 
-def test_ingest_batch_only_requests_database_parameters(monkeypatch):
+def test_ingest_batch_reports_not_implemented():
     fetch = Mock(side_effect=RuntimeError("stop after parameter selection"))
-    monkeypatch.setattr(ingest, "fetch_parameters_from_path", fetch)
 
-    with pytest.raises(RuntimeError, match="stop after parameter selection"):
+    with pytest.raises(NotImplementedError, match=r"ingest_batch\(\) is not yet implemented"):
         ingest.ingest_batch([], [])
 
-    fetch.assert_called_once_with(AWS_PARAMETER_PATH, expected_parameters=AWS_DBS)
+    fetch.assert_not_called()
 
 
 def test_metadata_check_only_requests_supported_queues(monkeypatch):
@@ -81,7 +80,8 @@ def test_monitor_selects_reference_bucket_only_when_needed(monkeypatch, monitor_
     fetch = Mock(side_effect=RuntimeError("stop after parameter selection"))
     monkeypatch.setattr(monitor, "fetch_parameters_from_path", fetch)
     monkeypatch.setattr(monitor, "load_s3_object", Mock())
-    monkeypatch.setattr(monitor.asdf, "open", Mock())
+    opened_asdf = MagicMock()
+    monkeypatch.setattr(monitor.asdf, "open", Mock(return_value=opened_asdf))
     message = {
         MessageKeys.ARCHIVE_BUCKET: "bucket",
         MessageKeys.ARCHIVE_OBJECT_KEY: "key",
