@@ -181,6 +181,8 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
        For L2 science files:
             - ``observation_id``
             - ``exp_start_datetime`` (converted to timezone-aware UTC)
+            - ``ra``
+            - ``dec``
             - ``romancal_version``
             - ``crds_context``
             - ``sdf_version``
@@ -239,6 +241,12 @@ def update_metadata_table(session, filename, reprocess_number, monitor_name, met
         if metadata_table_class.file_type == FileTypes.L2_SCIENCE:
             meta_row.observation_id = metadata_dict['observation']['observation_id']
             meta_row.exp_start_datetime = metadata_dict['exposure']['start_time'].to_datetime(timezone=timezone.utc)
+            meta_row.target_ra = metadata_dict['pointing']['target_ra']
+            meta_row.target_dec = metadata_dict['pointing']['target_dec']
+            meta_row.target_pa = metadata_dict['pointing']['pa_aperture']
+            meta_row.target_aperture = metadata_dict['pointing']['target_aperture']
+            meta_row.detector_ra = metadata_dict['wcsinfo']['ra_ref']
+            meta_row.detector_dec = metadata_dict['wcsinfo']['dec_ref']
             meta_row.romancal_version = metadata_dict['calibration_software_version']
             meta_row.crds_context = metadata_dict['ref_file']['crds']['context']
             meta_row.sdf_version = metadata_dict['sdf_software_version']

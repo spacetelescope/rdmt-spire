@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..constants.database import (
     ARCHIVE_LENGTH,
     DETECTOR_LENGTH,
+    FILE_CHECKSUM_LENGTH,
     FILENAME_LENGTH,
     OPTICAL_ELEMENT_LENGTH,
     SOFTWARE_VERSION_LENGTH,
@@ -36,6 +37,13 @@ class L1GuideWindowMetaTable(Base):
     archive_key:            Mapped[str] = mapped_column(String(ARCHIVE_LENGTH)) # from body['archiveObjectKey']
     file_created_datetime:  Mapped[datetime] = mapped_column(DateTime()) # from body['fileCreationTimestamp']
     dmd_notify_datetime:    Mapped[datetime] = mapped_column(DateTime()) # from outer message structure
+    file_checksum:          Mapped[Optional[str]] = mapped_column(String(FILE_CHECKSUM_LENGTH)) # from body['checksum']
+
+    # prompt guide windows are processed twice: 
+    # once when all the L0 data is available and
+    # again ~ 1 day later to make sure they are as "complete" as possible
+    # This column is intended to indicate which version of the prompt guide window file this row corresponds to
+    prompt_version:          Mapped[Optional[int]] = mapped_column(Integer())
 
     # Information that requires opening the file to extract
     acq_start_datetime:     Mapped[Optional[datetime]] = mapped_column(DateTime()) # from meta.start_time
