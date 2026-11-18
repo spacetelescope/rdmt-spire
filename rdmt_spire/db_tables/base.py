@@ -9,10 +9,13 @@ Copied from rtbdb code.
 import datetime
 import inspect
 import logging
+import math
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, event
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, event
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.types import TypeDecorator
 
+logger = logging.getLogger(__name__)
 
 class Base(DeclarativeBase):
     """Base table class for using SQLAlchemy for database interfacing.
@@ -74,8 +77,7 @@ class Base(DeclarativeBase):
     def _get_verification_columns(self) -> list:
         """List which columns to verify if two classes are equal using _verify().
         
-        This function is a placeholder. 
-        It needs to be updated in each subclass. 
+        By default, all columns returned by _get_columns() are verified.
 
         Returns
         -------
@@ -83,7 +85,7 @@ class Base(DeclarativeBase):
             contains the column names that should be verified in each table
             
         """
-        raise NotImplementedError
+        return self._get_columns()
 
     def _verify(self, other, retry_write: bool = True, 
                 return_result: bool = False):
@@ -249,3 +251,35 @@ def configure_listener(class_, key, inst):
             return validator(class_, key, value)
         else:
             return value
+
+# Listen for when a Column is attached to a table to label NaNToNullFloat columns with their full name.
+@event.listens_for(Column, "after_parent_attach")
+def label_nan_column(column, table):
+    if isinstance(column.type, NaNToNullFloat):
+        # Give each column its own type instance, even if one was reused.
+        column.type = column.type.copy()
+        column.type.column_name = f"{table.fullname}.{column.name}"
+
+class NaNToNullFloat(TypeDecorator):
+    """Store floating-point NaN as SQL NULL and return it as None."""
+
+    impl = Float
+    cache_ok = True
+
+    column_name = None
+
+    def _normalize(self, value, operation):
+        if value is not None and math.isnan(value):
+            logger.warning(
+                "Converted NaN to None while %s column %s",
+                operation,
+                self.column_name,
+            )
+            return None
+        return value
+
+    def process_bind_param(self, value, dialect):
+        return self._normalize(value, "writing")
+
+    def process_result_value(self, value, dialect):
+        return self._normalize(value, "reading")

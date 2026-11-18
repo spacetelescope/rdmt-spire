@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..constants.database import (
@@ -14,7 +14,7 @@ from ..constants.database import (
     MonitorStatus,
 )
 from ..constants.dmd import FileTypes
-from .base import Base, ResultsBase
+from .base import Base, NaNToNullFloat, ResultsBase
 
 
 class L1GuideWindowMetaTable(Base):
@@ -48,26 +48,6 @@ class L1GuideWindowMetaTable(Base):
     # 0 indicates the monitor still needs to be run
     # 1 indicates the monitor ran successfully
     essential_status:         Mapped[int] = mapped_column(Integer(), default=int(MonitorStatus.NEEDS_TO_RUN)) # populated by Spire
-
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "reprocess_number",
-            "program_number",
-            "gw_acquisition_number",
-            "acquisition_id",
-            "acq_start_datetime",
-            "visit_id",
-            "detector",
-            "optical_element",
-            "archive_bucket",
-            "archive_key",
-            "file_created_datetime",
-            "dmd_notify_datetime",
-            "sdf_version",
-            "monitor_end_datetime",
-            "essential_status",
-        ]
     
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L1_GUIDE_WINDOW
@@ -87,13 +67,13 @@ class L1GuideWindowResultsTable(ResultsBase):
     saturation_status:           Mapped[Optional[str]] = mapped_column(String(20))
     saturation_status_eval:      Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    median_background:           Mapped[Optional[float]] = mapped_column(Float())
+    median_background:           Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     median_background_eval:      Mapped[Optional[bool]] = mapped_column(Boolean())
-    mean_noise:                  Mapped[Optional[float]] = mapped_column(Float())
+    mean_noise:                  Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     mean_noise_eval:             Mapped[Optional[bool]] = mapped_column(Boolean())
-    median_background_std:       Mapped[Optional[float]] = mapped_column(Float())
+    median_background_std:       Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     median_background_std_eval:  Mapped[Optional[bool]] = mapped_column(Boolean())
-    noise_std:                   Mapped[Optional[float]] = mapped_column(Float())
+    noise_std:                   Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     noise_std_eval:              Mapped[Optional[bool]] = mapped_column(Boolean())
 
     num_background_outliers:        Mapped[Optional[int]] = mapped_column(Integer())
@@ -101,54 +81,20 @@ class L1GuideWindowResultsTable(ResultsBase):
     num_noise_outliers:             Mapped[Optional[int]] = mapped_column(Integer())
     num_noise_outliers_eval:        Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    mean_count_rate:                Mapped[Optional[float]] = mapped_column(Float())
+    mean_count_rate:                Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     mean_count_rate_eval:           Mapped[Optional[bool]] = mapped_column(Boolean())
-    std_count_rate:                 Mapped[Optional[float]] = mapped_column(Float())
+    std_count_rate:                 Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     std_count_rate_eval:            Mapped[Optional[bool]] = mapped_column(Boolean())
     num_count_rate_outliers:        Mapped[Optional[int]] = mapped_column(Integer())
     num_count_rate_outliers_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    rms_x_centroid_error:        Mapped[Optional[float]] = mapped_column(Float())
+    rms_x_centroid_error:        Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     rms_x_centroid_error_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
-    rms_y_centroid_error:        Mapped[Optional[float]] = mapped_column(Float()) 
+    rms_y_centroid_error:        Mapped[Optional[float]] = mapped_column(NaNToNullFloat()) 
     rms_y_centroid_error_eval:   Mapped[Optional[bool]] = mapped_column(Boolean())
 
-    rms_centroid_offset:         Mapped[Optional[float]] = mapped_column(Float())
+    rms_centroid_offset:         Mapped[Optional[float]] = mapped_column(NaNToNullFloat())
     rms_centroid_offset_eval:    Mapped[Optional[bool]] = mapped_column(Boolean()) 
-
-    def _get_verification_columns(self):
-        return [
-            "filename",
-            "reprocess_number",
-            "acquisition_status",
-            "acquisition_status_eval",
-            "saturation_status",
-            "saturation_status_eval",
-            "median_background",
-            "median_background_eval",
-            "mean_noise",
-            "mean_noise_eval",
-            "median_background_std",
-            "median_background_std_eval",
-            "noise_std",
-            "noise_std_eval",
-            "num_background_outliers",
-            "num_background_outliers_eval",
-            "num_noise_outliers",
-            "num_noise_outliers_eval",
-            "mean_count_rate",
-            "mean_count_rate_eval",
-            "std_count_rate",
-            "std_count_rate_eval",
-            "num_count_rate_outliers",
-            "num_count_rate_outliers_eval",
-            "rms_x_centroid_error",
-            "rms_x_centroid_error_eval",
-            "rms_y_centroid_error",
-            "rms_y_centroid_error_eval",
-            "rms_centroid_offset",
-            "rms_centroid_offset_eval",
-        ]
 
     # Used for mapping the table classes to the file types they relate to
     file_type = FileTypes.L1_GUIDE_WINDOW
