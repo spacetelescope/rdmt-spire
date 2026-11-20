@@ -1,10 +1,12 @@
+import datetime
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
 
 import boto3
 import duckdb
+import sqlalchemy.engine
+from sqlalchemy import text
 
 from ..constants.codes import StatusCodes
 from ..constants.database import MonitorStatus
@@ -78,15 +80,24 @@ def _get_report_spec(report_type: str = FileTypes.L2_SCIENCE, params: dict = {})
         f"Invalid report_type '{report_type}'. Must be '{FileTypes.L2_SCIENCE}' or '{FileTypes.L1_GUIDE_WINDOW}'."
     )
 
-def report_function(report_type: str = FileTypes.L2_SCIENCE):
+def report_function(report_type: str = FileTypes.L2_SCIENCE,
+                    exp_range_start: str | datetime.datetime = None,
+                    exp_range_end: str | datetime.datetime = None):
     """
     Orchestrates the extraction, transformation, and reporting of RDMT file
     metadata, metrics and evaluations.
 
     This function connects to a MySQL database via DuckDB, identifies new
-    records ready for reporting based on monitor status, updates their report
+    records ready for reporting based on either monitor status or a
+    user-provided range of exposure start times, updates their report
     timestamps, exports the combined metadata and results to a partitioned S3
     Parquet dataset, and finally sends a summary notification via AWS SNS.
+
+    If exp_range_start and exp_range_end arguments are absent (default),
+    reports are generated for all database rows whose `monitor_end_datetime`
+    entries are null. If exp_range_start and exp_range_end arguments are
+    supplied, reports are generated for all rows with `exp_start_datetime`
+    values within the chosen date range.
 
     The process follows an ELT (Extract, Load, Transform) pattern leveraging
     DuckDB's in-memory processing and S3 connectivity.
@@ -94,7 +105,14 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
     Parameters
     ----------
     report_type : str
-        The type of report to generate either FileTypes.L2_SCIENCE or FileTypes.L1_GUIDE_WINDOW. Defaults to FileTypes.L2_SCIENCE.
+        The type of report to generate either FileTypes.L2_SCIENCE or
+        FileTypes.L1_GUIDE_WINDOW. Defaults to FileTypes.L2_SCIENCE.
+    exp_range_start : str, datetime.datetime, or None
+        The earliest (inclusive) UTC `exp_start_datetime` value in database rows
+        from which reports will be generated. [Default: None]
+    exp_range_end : str, datetime.datetime, or None
+        The latest (inclusive) UTC `exp_start_datetime` value in database rows
+        from which reports will be generated. [Default: None]
 
     Returns
     -------
@@ -102,6 +120,28 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
         A dictionary containing the execution status and a summary message.
         Example: ``{'statusCode': 200, 'body': [{'_message': '...'}]}``.
     """
+    if not any((exp_range_start, exp_range_end)):
+        select_by_null = True
+        logger.info('Selecting report rows by null monitor_end_datetime')
+    elif not all((exp_range_start, exp_range_end)):
+        raise ValueError('Must supply either both or none of exp_range_start '
+                         'and exp_range_end arguments to report function.')
+    elif (not isinstance(exp_range_start, (str, datetime.datetime))
+          or not isinstance(exp_range_end, (str, datetime.datetime))
+    ):
+        raise ValueError ('exp_range_start and exp_range_end arguments of '
+                          'report function must be str or datetime.datetime')
+    else:
+        if isinstance(exp_range_start, str):
+            exp_range_start = datetime.datetime.fromisoformat(exp_range_start)
+        if isinstance(exp_range_end, str):
+            exp_range_end = datetime.datetime.fromisoformat(exp_range_end)
+        if exp_range_start >= exp_range_end:
+            raise ValueError('exp_range_start must be before exp_range_end')
+        select_by_null = False
+        logger.info('Selecting report rows from exp_start_datetime '
+                        f"{exp_range_start} to {exp_range_end}")
+
     expected_parameters = AWS_DBS + [PARQUET_FILE_BUCKET]
     if report_type == FileTypes.L2_SCIENCE:
         expected_parameters.append(SCIENCE_REPORTING_TOPIC)
@@ -110,63 +150,91 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
     params = fetch_parameters_from_path(AWS_PARAMETER_PATH, expected_parameters=expected_parameters)
 
     conn = None
+
+    # query matching rows with sqlalchemy for better datetime handling in WHERE
+    # clause in exp_start_datetime cases (DuckDB adds "::TIMESTAMP" to them)
     try:
         report_spec = _get_report_spec(report_type, params)
 
-        logger.info('Getting SQL URL')
-        sql_url = connect_to_db(database_name=params[DB_NAME], secret_name=params[DB_SECRET_NAME]).url
+        # initialize sqlalchemy connection
+        logger.info('Getting SQLAlchemy database engine')
+        engine = connect_to_db(database_name=params[DB_NAME],
+                               secret_name=params[DB_SECRET_NAME])
 
-        # initialize duckdb local database
-        logger.info('Connecting to duckdb')
-        conn = duckdb.connect(database=':memory:')
-        duckdb_extension_path = os.environ.get('DUCKDB_EXTENSIONS_PATH', '/duckdb_extensions')
-        conn.execute(f"SET extension_directory = '{duckdb_extension_path}';")
+        # Generate the report datetime and set the value for all columns to be
+        # reported. Depending on function arguments, all rows where either:
+        # a) file reported date is not populated but all "_status" columns are
+        # -1 or 1 (indicating all monitors that needed to run have done so successfully)
+        # b) exposure start time is between exp_range_start and exp_range_end
+        report_time = datetime.datetime.now().replace(microsecond=0)
 
-        # Load the extensions pre-baked into your Docker image
-        # 'mysql': To connect to MySQL; 'aws' & 'httpfs': To stream directly to S3
-        logger.info('Loading duckdb modules')
-        conn.execute("LOAD mysql;")# TODO: LOAD aws; LOAD httpfs;")
-
-        # 2. Create a secret using the 'credential_chain' provider
-        # This tells DuckDB to automatically find credentials using AWS SDK mechanisms
-        logger.info('Creating duckdb secrets')
-        conn.execute("CREATE SECRET (TYPE s3, PROVIDER credential_chain);")
-
-        # --- 3. LINKING THE DATABASE ---
-        # Construct a DuckDB-specific connection string from the SQLAlchemy object
-        create_secret_sql = f"""
-            CREATE OR REPLACE TEMPORARY SECRET db_secret (
-                TYPE mysql,
-                HOST '{sql_url.host}',
-                DATABASE '{sql_url.database}',
-                USER '{sql_url.username}',
-                PASSWORD '{sql_url.password}'
-            );
+        with engine.connect() as eng:
+            status_ready_condition = _status_columns_ready_condition(eng, report_spec.meta_table_name)
+            time_condition = ('monitor_end_datetime IS NULL' if select_by_null
+                              else ("exp_start_datetime >= :begin "
+                                    "AND exp_start_datetime <= :end"))
+            update_report_time_str = f"""
+                UPDATE {report_spec.meta_table_name}
+                SET monitor_end_datetime = :now
+                WHERE {status_ready_condition}
+                AND {time_condition}
             """
-        conn.sql(create_secret_sql)
 
-        # 'ATTACH' creates a virtual link. It does NOT download the data yet.
-        # To DuckDB, the remote MySQL database now behaves like a local schema.
-        logger.info('Attaching external database to duckdb')
-        conn.sql("ATTACH '' AS rdmt_db (TYPE mysql, SECRET 'db_secret');")
+            query_dict = {'now': report_time,
+                          'begin': exp_range_start, 'end': exp_range_end}
+            logger.info(f"Query: {text(update_report_time_str).text}")  # TEMP
+            update_report_result = eng.execute(text(update_report_time_str),
+                                              query_dict)
+            num_reported_rows = update_report_result.rowcount
+            eng.commit()
+            logger.info(f"Reported rows: {num_reported_rows}")
+    except Exception as e:
+        logger.error(f"{e}")
+        raise
+    finally:
+        engine.connect().close()
 
-        # Switch to using rdmt_db server as default to allow SQLAlchemy to make SQL strings
-        conn.sql("USE rdmt_db;")
+    # if there were updates, continue the process via a DuckDB connection
+    if num_reported_rows > 0:
+        try:
+            logger.info('Getting SQL URL')
+            sql_url = connect_to_db(database_name=params[DB_NAME],
+                                    secret_name=params[DB_SECRET_NAME]).url
 
-        # Generate the report datetime and set the value for all columns to be reported (e.g. all rows where file reported date is not populated but all "_status" columns are -1 or 1 (indicating all monitors that needed to run have done so successfully))
-        report_time = datetime.now().replace(microsecond=0)
-        status_ready_condition = _status_columns_ready_condition(conn, report_spec.meta_table_name)
-        update_report_time_str = f"""
-            UPDATE {report_spec.meta_table_name}
-            SET monitor_end_datetime = $1
-            WHERE {status_ready_condition}
-            AND monitor_end_datetime IS NULL
-        """
-        update_report_result = conn.execute(update_report_time_str, (report_time,))
-        num_reported_rows = update_report_result.fetchall()[0][0]
-        logger.info(f"Number of reported rows: {num_reported_rows}")
+            # initialize duckdb local database
+            logger.info('Connecting to duckdb')
+            conn = duckdb.connect(database=':memory:')
+            duckdb_extension_path = os.environ.get('DUCKDB_EXTENSIONS_PATH',
+                                                   '/duckdb_extensions')
+            conn.execute(f"SET extension_directory = '{duckdb_extension_path}';")
 
-        if num_reported_rows > 0:
+            # Create a secret using the 'credential_chain' provider.
+            # This tells DuckDB to automatically find credentials using AWS SDK mechanisms
+            logger.info('Creating duckdb secrets')
+            conn.execute("CREATE SECRET (TYPE s3, PROVIDER credential_chain);")
+
+            # --- LINKING THE DATABASE ---
+            # Construct a DuckDB-specific connection string from the SQLAlchemy object
+            create_secret_sql = f"""
+                CREATE OR REPLACE TEMPORARY SECRET db_secret (
+                    TYPE mysql,
+                    HOST '{sql_url.host}',
+                    DATABASE '{sql_url.database}',
+                    USER '{sql_url.username}',
+                    PASSWORD '{sql_url.password}'
+                );
+                """
+            conn.sql(create_secret_sql)
+
+            # 'ATTACH' creates a virtual link. It does NOT download the data yet.
+            # To DuckDB, the remote MySQL database now behaves like a local schema.
+            logger.info('Attaching external database to duckdb')
+            conn.sql("ATTACH '' AS rdmt_db (TYPE mysql, SECRET 'db_secret');")
+
+            # Switch to using rdmt_db server as default to allow SQLAlchemy
+            # to make SQL strings
+            conn.sql("USE rdmt_db;")
+
             # Package metadata and results data into Parquet dataset
             s3_dataset_prefix = f"{report_spec.dataset_prefix}/"
             s3_parquet_bucket_path = f"s3://{params[PARQUET_FILE_BUCKET]}/{s3_dataset_prefix}"
@@ -184,9 +252,11 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
                 logger.info('Parquet dataset exists. Appending new rows.')
             else:
                 parquet_command = ""
-                logger.info('Parquet dataset does not exist. Creating new dataset.')
+                logger.info('Parquet dataset does not exist. '
+                            'Creating new dataset.')
 
-            # TODO: We might want to sort the exported Parquet file by visit id or obs id or program to speed up queries
+            # TODO: We might want to sort the exported Parquet file by visit id
+            # or obs id or program to speed up queries
             parquet_export_str = f"""
                 COPY (
                     SELECT
@@ -226,36 +296,38 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE):
                 logger.info('Successfully posted report to topic.')
             except Exception as e:
                 logger.error(f'{e}')
-                raise e
+                raise
 
-        else:
-            logger.info('No new rows to report.')
+        except Exception as e:
+            logger.error(f"{e}")
+            raise
+        finally:
+            if conn is not None:
+                try:
+                    databases = conn.sql("SHOW DATABASES").fetchall()
+                    db_names = [row[0].lower() for row in databases]
 
-            return {'statusCode': StatusCodes.SUCCESS,
-                    'body': [{'message':'report_function: No new rows to report.'}]}
+                    if "rdmt_db" in db_names:
+                        fallback_db = next((name for name in db_names
+                                            if name != "rdmt_db"), None)
+                        if fallback_db is not None:
+                            conn.execute(f"USE {fallback_db};")
+                        else:
+                            # If rdmt_db is the only visible database,
+                            # create one to switch into.
+                            conn.execute("ATTACH ':memory:' AS fallback_db;")
+                            conn.execute("USE fallback_db;")
+                        conn.execute("DETACH rdmt_db;")
+                except Exception as cleanup_error:
+                    logger.warning(f"DuckDB cleanup warning: {cleanup_error}")
+                finally:
+                    conn.close()
 
-    except Exception as e:
-        logger.error(f"{e}")
-        raise e
-    finally:
-        if conn is not None:
-            try:
-                databases = conn.sql("SHOW DATABASES").fetchall()
-                db_names = [row[0] for row in databases]
+    else:
+        logger.info('No new rows to report.')
 
-                if "rdmt_db" in db_names:
-                    fallback_db = next((name for name in db_names if name != "rdmt_db"), None)
-                    if fallback_db is not None:
-                        conn.execute(f"USE {fallback_db};")
-                    else:
-                        # If rdmt_db is the only visible database, create one to switch into.
-                        conn.execute("ATTACH ':memory:' AS fallback_db;")
-                        conn.execute("USE fallback_db;")
-                    conn.execute("DETACH rdmt_db;")
-            except Exception as cleanup_error:
-                logger.warning(f"DuckDB cleanup warning: {cleanup_error}")
-            finally:
-                conn.close()
+        return {'statusCode': StatusCodes.SUCCESS,
+                'body': [{'message':'report_function: No new rows to report.'}]}
 
     logger.info("Successfully finished reporting lambda.")
     return {'statusCode': StatusCodes.SUCCESS,
@@ -266,27 +338,43 @@ def _status_columns_ready_condition(conn, table_name: str) -> str:
 
     Parameters
     ----------
-    conn : duckdb.DuckDBPyConnection
-        An active DuckDB connection object capable of executing SQL queries.
+    conn : duckdb.DuckDBPyConnection or sqlalchemy.engine.Connection
+        An active DuckDB or SQLAlchemy connection object capable of executing
+        SQL queries.
     table_name : str
         The name of the table to inspect for *_status columns.
     """
-    status_columns_query = """
+    if isinstance(conn, duckdb.DuckDBPyConnection):
+        key_formatter = '$'
+        needs_wrap = False
+    elif isinstance(conn, sqlalchemy.engine.Connection):
+        key_formatter = ':'
+        needs_wrap = True
+    else:
+        raise ValueError('Connection type for _status_columns_ready_condition '
+                         'must be duckdb.DuckDBPyConnection or '
+                         'sqlalchemy.engine.Connection.')
+
+    wrap_query = text if needs_wrap else lambda x: x
+    status_columns_query = wrap_query(f"""
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_name = $1
+        WHERE table_name = {key_formatter}table
           AND column_name LIKE '%_status'
         ORDER BY column_name;
-    """
-    status_columns = [row[0] for row in conn.execute(status_columns_query, (table_name,)).fetchall()]
+    """)
 
+    query_dict = {'table': table_name}
+    status_columns = [row[0] for row in conn.execute(status_columns_query,
+                                                     query_dict).fetchall()]
     if not status_columns:
         raise ValueError(f"No *_status columns found in table '{table_name}'.")
 
     # Quote identifiers in case a status column name collides with SQL keywords.
     terminal_statuses = f"{int(MonitorStatus.NOT_APPLICABLE)}, {int(MonitorStatus.COMPLETE)}"
     return " AND ".join(
-        f'"{column_name}" IN ({terminal_statuses})' for column_name in status_columns
+        f"{column_name} IN ({terminal_statuses})"
+        for column_name in status_columns
     )
 
 def generate_report_message(
@@ -310,7 +398,7 @@ def generate_report_message(
     s3_parquet_bucket : str
         The base S3 bucket path (e.g., 's3://my-data-bucket/'). The function
         appends wildcards to search for nested Parquet files.
-    report_generation_time : str or datetime
+    report_generation_time : datetime.datetime
         The specific timestamp used to filter the `monitor_end_datetime`
         column in the dataset.
     report_spec : ReportSpec
@@ -379,7 +467,7 @@ def get_failed_evaluations(
     s3_parquet_file_path : str
         The S3 URI or path to the Parquet files (e.g., 's3://bucket/data/').
         Must support Hive-style partitioning.
-    report_generation_time : str or datetime
+    report_generation_time : str or datetime.datetime
         The specific timestamp used to filter the `monitor_end_datetime`
         column in the dataset.
     report_spec : ReportSpec
@@ -466,7 +554,7 @@ def get_monitored_files(
     s3_parquet_file_path : str
         The S3 URI or path to the Parquet files (e.g., 's3://bucket/data/').
         Must support Hive-style partitioning.
-    report_generation_time : str or datetime
+    report_generation_time : str or datetime.datetime
         The specific timestamp used to filter the `monitor_end_datetime`
         column in the dataset.
     report_spec : ReportSpec
