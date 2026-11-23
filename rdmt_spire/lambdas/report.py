@@ -260,7 +260,7 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE,
             parquet_export_str = f"""
                 COPY (
                     SELECT
-                        M.*,
+                        M.* EXCLUDE(archive_bucket, archive_key),
                         R.* EXCLUDE(filename, reprocess_number),
                         year(M.{report_spec.start_time_column}) AS obs_year_part,
                         month(M.{report_spec.start_time_column}) AS obs_month_part
