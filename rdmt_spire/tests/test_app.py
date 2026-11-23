@@ -26,11 +26,11 @@ def test_lambda_app():
         'checksum':             'test checksum (hex)', #32 char MD5 hex
         'reprocessingState':    'none', # 'none', 'reprocessed', or 'data_release'
         'reprocessingId':       'for_testing', #string set by HLPP operators
-        'externalSource':       '', 
+        'externalSource':       '',
         'filename':             'somefile.txt',
-        'fileType':             'science_wfi_level_2', 
+        'fileType':             'science_wfi_level_2',
         'fileSubType':          'image', # optional and still unclear what this will actually be in ops
-        'fileSize':             '100000000', # in bytes 
+        'fileSize':             '100000000', # in bytes
         'fileCreationTimestamp':'2023-10-05T14:48:00.000Z', # in UTC
         'program_category':     'CCS',
         'program_subcategory':  'HLWA',
@@ -59,7 +59,7 @@ def test_lambda_app():
     report_event = {MessageKeys.FUNCTION_TYPE: FunctionTypes.REPORT_GEN}
     with patch('rdmt_spire.app.report_function', return_value=failure_response) as report_handler:
         assert handler(report_event, context) == failure_response
-        report_handler.assert_called_once_with(None)
+        report_handler.assert_called_once_with(None, None, None)
 
     metadata_event = {MessageKeys.FUNCTION_TYPE: FunctionTypes.METADATA_CHECK}
     with patch('rdmt_spire.app.metadata_check_function', return_value=failure_response) as metadata_handler:

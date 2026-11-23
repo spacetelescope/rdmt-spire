@@ -48,29 +48,41 @@ def handler(event: Dict, context: Dict) -> Dict[str, int| List[Dict[Any, Any]]]:
             elif body[MessageKeys.FUNCTION_TYPE] == FunctionTypes.MONITOR:
                 return monitor_function(body)
             else:
-                raise ValueError(f"{StatusCodes.BAD_EVENT_FORMAT}: Bad function type ({body[MessageKeys.FUNCTION_TYPE]}): Unsupported function type specified in the event with Records outer layer. Please check implementation.")
+                raise ValueError(f"{StatusCodes.BAD_EVENT_FORMAT}: Bad function "
+                                 f"type ({body[MessageKeys.FUNCTION_TYPE]}): "
+                                 'Unsupported function type specified in the '
+                                 'event with Records outer layer. Please check '
+                                 'implementation.')
         else:
             # NOT YET FULLY IMPLEMENTED. Please ensure that the batch processing logic is correctly handled for multiple records before using.
-            message_dicts = [json.loads(rec['body']['Message']) for rec in event['Records']]
-            function_type_checks = [MessageKeys.FUNCTION_TYPE in message_dict.keys() for message_dict in message_dicts]
+            message_dicts = [json.loads(rec['body']['Message'])
+                             for rec in event['Records']]
+            function_type_checks = [MessageKeys.FUNCTION_TYPE in message_dict.keys()
+                                    for message_dict in message_dicts]
 
             # if no function_type is specified, the 'ingest_function' should be used
             if sum(function_type_checks) == 0:
-                
+
                 unix_timestamps = [float(rec['attributes']['SentTimestamp'])/1000.0 for rec in event['Records']]
                 notification_datetimes = [datetime.fromtimestamp(ts, timezone.utc) for ts in unix_timestamps]
                 return ingest_batch(message_dicts, notification_datetimes)
             else:
-                raise ValueError(f"{StatusCodes.BAD_LAMBDA_BATCH_SIZE}: A lambda function not running ingest_function received more than 1 request.")
+                raise ValueError(f"{StatusCodes.BAD_LAMBDA_BATCH_SIZE}: A "
+                                 'lambda function not running ingest_function '
+                                 'received more than 1 request.')
     # Other events should have a 'function_type' key in the event dictionary. These will trigger the report and metadata_check functions
     elif MessageKeys.FUNCTION_TYPE in event.keys():
         if event[MessageKeys.FUNCTION_TYPE] == FunctionTypes.METADATA_CHECK:
             return metadata_check_function(event, aws_account_id)
         elif event[MessageKeys.FUNCTION_TYPE] == FunctionTypes.REPORT_GEN:
             report_type = event.get(MessageKeys.REPORT_TYPE)
-            return report_function(report_type)
+            exp_range_start = event.get(MessageKeys.EXP_RANGE_START, None)
+            exp_range_end = event.get(MessageKeys.EXP_RANGE_END, None)
+            return report_function(report_type, exp_range_start, exp_range_end)
         else:
-            raise ValueError(f"{StatusCodes.BAD_EVENT_FORMAT}: Unsupported function type specified in the event ({event[MessageKeys.FUNCTION_TYPE]}).")
+            raise ValueError(f"{StatusCodes.BAD_EVENT_FORMAT}: Unsupported "
+                             'function type specified in the event '
+                             f"({event[MessageKeys.FUNCTION_TYPE]}).")
     else:
         logger.error(
             "Invalid Lambda event (request_id=%s, has_records=%s, has_function_type=%s (%s))",

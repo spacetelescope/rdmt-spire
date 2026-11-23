@@ -89,8 +89,8 @@ VALID_L2_SCIENCE_EXPOSURE_TYPES = tuple(L2_SCIENCE_EXPOSURE_CONFIG)
 
 # Valid file suffixes for ingestion
 VALID_FILE_SUFFIXES = [
-    '_cal.asdf', 
-    '_gw.asdf', 
+    '_cal.asdf',
+    '_gw.asdf',
     '_cat.parquet'
 ]
 
@@ -133,6 +133,8 @@ class MessageKeys(StrEnum):
 
     METADATA_CHECK_TYPE = 'metadata_check_type'
     REPORT_TYPE = 'report_type'
+    EXP_RANGE_START = 'exp_range_start'
+    EXP_RANGE_END = 'exp_range_end'
 
 # Monitor names for use within Spire itself. These are only then names of monitors triggered by lambda functions
 class MonitorGroupName(StrEnum):
