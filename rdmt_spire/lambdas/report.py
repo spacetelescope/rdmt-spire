@@ -257,10 +257,14 @@ def report_function(report_type: str = FileTypes.L2_SCIENCE,
 
             # TODO: We might want to sort the exported Parquet file by visit id
             # or obs id or program to speed up queries
+            
+            # Exclude archive information from the exported Parquet file to 
+            # avoid storing sensitive data and exclude duplicate columns from 
+            # the results table
             parquet_export_str = f"""
                 COPY (
                     SELECT
-                        M.*,
+                        M.* EXCLUDE(archive_bucket, archive_key),
                         R.* EXCLUDE(filename, reprocess_number),
                         year(M.{report_spec.start_time_column}) AS obs_year_part,
                         month(M.{report_spec.start_time_column}) AS obs_month_part
