@@ -213,7 +213,7 @@ def create_table_class_from_message(message_dict):
         meta_table.filename = message_dict[MessageKeys.FILENAME]
         meta_table.archive_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
         meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
-        meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+        meta_table.file_created_datetime = datetime.fromisoformat(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP]).replace(tzinfo=timezone.utc)
         exposure_config = L2_SCIENCE_EXPOSURE_CONFIG[exposure_type]
         meta_table.exposure_type = exposure_config["exposure_type"]
         for status_column, status_value in exposure_config["status_values"].items():
@@ -238,7 +238,7 @@ def create_table_class_from_message(message_dict):
         meta_table.filename = message_dict[MessageKeys.FILENAME]
         meta_table.archive_bucket = message_dict[MessageKeys.ARCHIVE_BUCKET]
         meta_table.archive_key = message_dict[MessageKeys.ARCHIVE_OBJECT_KEY]
-        meta_table.file_created_datetime = datetime.strptime(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+        meta_table.file_created_datetime = datetime.fromisoformat(message_dict[MessageKeys.FILE_CREATION_TIMESTAMP]).replace(tzinfo=timezone.utc)
 
         # Save metadata from the filename
         obs_info = get_info_from_filename(message_dict[MessageKeys.FILENAME], FileTypes.L1_GUIDE_WINDOW)
